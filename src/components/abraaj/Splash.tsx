@@ -1,3 +1,6 @@
+import video1 from "@/assets/video/video-1.mp4";
+import video1Poster from "@/assets/video/video-1-poster.jpg";
+
 const words = ["Pure.", "Fresh.", "Delivered."];
 
 export function Splash({ leaving }: { leaving: boolean }) {
@@ -9,15 +12,14 @@ export function Splash({ leaving }: { leaving: boolean }) {
     >
       <video
         className="absolute inset-0 h-full w-full object-cover"
-        src="/src/assets/video/video-1.mp4"
-        poster="/src/assets/video/video-1-poster.jpg"
+        src={video1}
+        poster={video1Poster}
         preload="auto"
         autoPlay
         muted
         loop
         playsInline
       />
-      {/* optional dark/tint overlay so the text stays legible over the footage */}
       <div className="absolute inset-0 bg-background/40" />
 
       <div className="absolute z-10 bottom-16 left-1/2 -translate-x-1/2 flex items-center gap-2">

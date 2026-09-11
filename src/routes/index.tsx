@@ -15,7 +15,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import logo from "@/assets/logo.jpg";
+import logo from "@/assets/logo-2.png";
 import { Splash } from "@/components/abraaj/Splash";
 import { categories, plans, products, type Product } from "@/lib/abraaj-data";
 
@@ -51,6 +51,10 @@ function App() {
   const [booting, setBooting] = useState(true);
   const [leaving, setLeaving] = useState(false);
   const [logoPhase, setLogoPhase] = useState<LogoPhase>("center");
+  // Controls the logo's initial fade+scale-in. Starts false so the very first paint
+  // is invisible/slightly scaled down, then flips true a tick later so the browser
+  // animates the transition instead of snapping straight to visible.
+  const [logoMounted, setLogoMounted] = useState(false);
   const [tab, setTab] = useState<Tab>("home");
   const [category, setCategory] = useState<string>("All");
   const [query, setQuery] = useState("");
@@ -58,7 +62,38 @@ function App() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [planId, setPlanId] = useState("biweekly");
 
+  // Floating header: hides on scroll-down, reappears on scroll-up, and picks up a
+  // soft shadow once the page has scrolled away from the very top so it visually
+  // "floats" above the content instead of sitting flush against it.
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const [headerElevated, setHeaderElevated] = useState(false);
+  const lastScrollY = useRef(0);
+
   useEffect(() => {
+    function handleScroll() {
+      const y = window.scrollY;
+      setHeaderElevated(y > 4);
+
+      if (y < 24) {
+        // Always show the header once we're back near the top.
+        setHeaderHidden(false);
+      } else if (y > lastScrollY.current + 4) {
+        // Scrolling down -> hide.
+        setHeaderHidden(true);
+      } else if (y < lastScrollY.current - 4) {
+        // Scrolling up -> reveal.
+        setHeaderHidden(false);
+      }
+      lastScrollY.current = y;
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    // Flip on next frame so the fade+scale-in actually transitions instead of
+    // rendering already-visible on the very first paint.
+    const raf = requestAnimationFrame(() => setLogoMounted(true));
     // Splash starts leaving (and the logo starts flying to the header) at 2200ms.
     const a = setTimeout(() => setLeaving(true), 2200);
     const b = setTimeout(() => setLogoPhase("toHeader"), 2200);
@@ -67,6 +102,7 @@ function App() {
     // The travelling logo lands exactly on the header logo and is swapped out.
     const d = setTimeout(() => setLogoPhase("done"), 3000);
     return () => {
+      cancelAnimationFrame(raf);
       clearTimeout(a);
       clearTimeout(b);
       clearTimeout(c);
@@ -112,13 +148,17 @@ function App() {
 
   return (
     <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-background">
-      <header className="sticky top-0 z-20 flex items-center justify-between bg-background/90 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3 backdrop-blur-md">
+      <header
+        className={`sticky top-0 z-20 flex items-center justify-between bg-background/90 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3 backdrop-blur-md transition-transform duration-300 ease-out will-change-transform ${
+          headerHidden ? "-translate-y-full" : "translate-y-0"
+        } ${headerElevated ? "shadow-[0_8px_24px_-14px_rgba(13,42,110,0.4)]" : "shadow-none"}`}
+      >
         {/* Real header logo — invisible until the boot animation lands on this exact spot,
             then it silently takes over from the travelling overlay logo below. */}
         <img
           src={logo}
           alt="Abraaj Water"
-          className={`h-7 w-auto transition-opacity duration-300 ${
+          className={`h-14 w-auto transition-opacity duration-300 ${
             logoPhase === "done" ? "opacity-100" : "opacity-0"
           }`}
         />
@@ -255,9 +295,11 @@ function App() {
         </ul>
       </nav>
 
-      {/* Travelling boot logo: starts big and centered, then flies/shrinks into the
-          header's exact position before handing off to the real header logo. Sits above
-          the splash (z-50) so it stays visible while the splash fades out beneath it. */}
+      {/* Travelling boot logo — this is now the ONLY logo shown during boot (Splash no
+          longer renders its own). It fades/scales in centered, sits still, then flies
+          and shrinks into the header's exact position before handing off to the real
+          header logo. Sits above the splash (z-50) so it stays visible as the splash
+          background fades out beneath it. */}
       {logoPhase !== "done" && (
         <img
           src={logo}
@@ -265,8 +307,10 @@ function App() {
           aria-hidden="true"
           className={`pointer-events-none fixed z-50 h-24 w-auto object-contain transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:h-28 ${
             logoPhase === "toHeader"
-              ? "top-[max(1.25rem,env(safe-area-inset-top))] left-5 !h-7 -translate-x-0 -translate-y-0 scale-100 drop-shadow-none"
-              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 scale-100 drop-shadow-[0_10px_28px_rgba(15,58,138,0.35)]"
+              ? "top-[max(1.25rem,env(safe-area-inset-top))] left-5 !h-14 -translate-x-0 -translate-y-0 scale-100 opacity-100 drop-shadow-none"
+              : `top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_10px_28px_rgba(15,58,138,0.35)] ${
+                  logoMounted ? "scale-100 opacity-100" : "scale-90 opacity-0"
+                }`
           }`}
         />
       )}

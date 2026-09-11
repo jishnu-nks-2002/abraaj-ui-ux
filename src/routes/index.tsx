@@ -147,7 +147,7 @@ function App() {
   }
 
   return (
-    <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-background">
+    <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-clip bg-background">
       <header
         className={`sticky top-0 z-20 flex items-center justify-between bg-background/90 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3 backdrop-blur-md transition-transform duration-300 ease-out will-change-transform ${
           headerHidden ? "-translate-y-full" : "translate-y-0"

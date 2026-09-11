@@ -10,6 +10,8 @@ export function Splash({ leaving }: { leaving: boolean }) {
       <video
         className="absolute inset-0 h-full w-full object-cover"
         src="/src/assets/video/video-1.mp4"
+        poster="/src/assets/video/video-1-poster.jpg"
+        preload="auto"
         autoPlay
         muted
         loop
@@ -17,10 +19,6 @@ export function Splash({ leaving }: { leaving: boolean }) {
       />
       {/* optional dark/tint overlay so the text stays legible over the footage */}
       <div className="absolute inset-0 bg-background/40" />
-
-      {/* The logo itself is no longer rendered here — it now lives in index.tsx as a
-          single travelling element that fades in centered, sits still, then animates
-          into the header. Rendering it here too caused the double/overlapping logo. */}
 
       <div className="absolute z-10 bottom-16 left-1/2 -translate-x-1/2 flex items-center gap-2">
         {words.map((w, i) => (

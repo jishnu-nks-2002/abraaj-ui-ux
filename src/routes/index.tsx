@@ -190,6 +190,7 @@ function App() {
             onSeeAll={() => setTab("shop")}
             onOpen={setActive}
             onPlan={() => setTab("plan")}
+            onAdd={add}
           />
         )}
 
@@ -328,10 +329,12 @@ function HomeScreen({
   onSeeAll,
   onOpen,
   onPlan,
+  onAdd,
 }: {
   onSeeAll: () => void;
   onOpen: (p: Product) => void;
   onPlan: () => void;
+  onAdd: (p: Product) => void;
 }) {
   return (
     <div className="animate-rise">
@@ -395,20 +398,15 @@ function HomeScreen({
           See all
         </button>
       </div>
-      <div className="no-scrollbar -mx-5 mt-3 flex gap-3 overflow-x-auto px-5 pb-1">
-        {products.slice(0, 5).map((p) => (
-          <button
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        {products.map((p, i) => (
+          <ProductCard
             key={p.id}
-            onClick={() => onOpen(p)}
-            className="card-soft w-36 shrink-0 rounded-3xl p-3 text-left"
-          >
-            <div className="bg-aqua-soft grid h-28 place-items-center rounded-2xl">
-              <img src={p.image} alt={p.name} className="h-24 w-auto object-contain" />
-            </div>
-            <p className="mt-2 truncate text-xs font-bold text-foreground">{p.name}</p>
-            <p className="text-[10px] text-muted-foreground">{p.pack}</p>
-            <p className="mt-1 text-sm font-extrabold text-brand">AED {p.price}</p>
-          </button>
+            product={p}
+            delay={i * 40}
+            onOpen={() => onOpen(p)}
+            onAdd={() => onAdd(p)}
+          />
         ))}
       </div>
 
@@ -497,27 +495,27 @@ function HeroCarousel({ slides, interval = 4000 }: { slides: HeroSlide[]; interv
           {slides.map((s, i) => (
             <div
               key={i}
-              className="relative flex w-full shrink-0 items-center justify-between gap-3 overflow-hidden bg-gradient-to-br from-brand via-brand/90 to-aqua p-5"
+              className="relative flex w-full shrink-0 items-center justify-between gap-2 overflow-hidden bg-gradient-to-br from-brand via-brand/90 to-aqua p-4"
             >
               {/* subtle sheen so the gradient reads as glassy water, not flat */}
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.16),transparent_55%)]" />
               <div className="relative">
-                <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold tracking-wide text-white uppercase ring-1 ring-inset ring-white/25 backdrop-blur-sm">
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[9px] font-bold tracking-wide text-white uppercase ring-1 ring-inset ring-white/25 backdrop-blur-sm">
                   {s.badge}
                 </span>
-                <h2 className="mt-3 text-base leading-snug font-bold text-white sm:text-lg">{s.title}</h2>
-                <p className="mt-1 text-xs text-white/75">{s.subtitle}</p>
+                <h2 className="mt-2 text-sm leading-snug font-bold text-white sm:text-base">{s.title}</h2>
+                <p className="mt-0.5 text-[11px] text-white/75">{s.subtitle}</p>
                 <button
                   onClick={s.onClick}
-                  className="mt-4 inline-flex items-center gap-1 rounded-full bg-background px-4 py-2 text-xs font-semibold text-brand"
+                  className="mt-3 inline-flex items-center gap-1 rounded-full bg-background px-3.5 py-1.5 text-[11px] font-semibold text-brand"
                 >
-                  {s.ctaLabel} <ChevronRight className="h-3.5 w-3.5" />
+                  {s.ctaLabel} <ChevronRight className="h-3 w-3" />
                 </button>
               </div>
               <img
                 src={s.image}
                 alt={s.imageAlt}
-                className="animate-float relative h-28 w-auto shrink-0 drop-shadow-[0_14px_24px_rgba(4,20,60,0.35)] sm:h-32"
+                className="animate-float relative h-20 w-auto shrink-0 drop-shadow-[0_10px_18px_rgba(4,20,60,0.35)] sm:h-24"
                 draggable={false}
               />
             </div>

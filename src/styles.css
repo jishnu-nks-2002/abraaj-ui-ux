@@ -19,6 +19,10 @@
  */
 
 @theme inline {
+  /* Extra breakpoint for small phones: anything below 375px (iPhone SE,
+     Galaxy A0x, older Androids) gets the tighter base styles, 375px+ gets xs:. */
+  --breakpoint-xs: 23.4375rem;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -67,7 +71,9 @@
 }
 
 :root {
-  --radius: 1rem;
+  /* Slightly tighter than before (was 1rem) so every rounded-* utility across
+     the app — cards, sheets, badges — reads less "bubbly" and more precise. */
+  --radius: 0.75rem;
   --brand: oklch(0.38 0.15 268);
   --brand-soft: oklch(0.95 0.03 262);
   --aqua: oklch(0.68 0.13 232);
@@ -104,6 +110,12 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /* Fluid layout rails. The app column is capped at 28rem, so vw-based values
+     stop growing once the phone is wider than that. */
+  --gutter: clamp(1rem, 4.4vw, 1.25rem);
+  --nav-h: calc(4.25rem + env(safe-area-inset-bottom));
+  --promo-h: 3rem;
 }
 
 .dark {
@@ -146,9 +158,27 @@
     border-color: var(--color-border);
   }
 
+  html {
+    /* Stops iOS Safari from inflating text in landscape. */
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    /* No sideways rubber-banding from the bleed rows / carousels. */
+    overflow-x: hidden;
+    overscroll-behavior-y: none;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  img,
+  video {
+    max-width: 100%;
   }
 }
 
@@ -181,6 +211,18 @@
 @keyframes fade-out-screen {
   to { opacity: 0; visibility: hidden; }
 }
+@keyframes ribbon-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
 @utility animate-logo-reveal {
   animation: logo-reveal 1.15s cubic-bezier(0.65, 0, 0.35, 1) forwards;
@@ -204,6 +246,16 @@
 @utility animate-splash-out {
   animation: fade-out-screen 0.5s 0.25s ease forwards;
 }
+/* Diagonal "return refreshed" ribbon on banners, moments and the drawer hero */
+@utility animate-marquee {
+  animation: ribbon-marquee 16s linear infinite;
+}
+@utility animate-drawer {
+  animation: drawer-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@utility animate-fade {
+  animation: fade-in 0.25s ease-out both;
+}
 @utility card-soft {
   background: var(--color-card);
   border: 1px solid color-mix(in oklab, var(--brand) 10%, transparent);
@@ -221,5 +273,59 @@
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* ---- Responsive helpers ----------------------------------------------- */
+
+/* One gutter value for the whole app, so full-bleed rows always line back up. */
+@utility px-screen {
+  padding-inline: var(--gutter);
+}
+@utility mx-screen-neg {
+  margin-inline: calc(var(--gutter) * -1);
+}
+
+/* Leaves room for the promo bar + tab bar, including the home indicator. */
+@utility pb-shell {
+  padding-bottom: calc(var(--nav-h) + var(--promo-h) + 1.5rem);
+}
+
+/* Fluid type scale — sizes track the viewport between the two clamp bounds,
+   so nothing overflows at 320px and nothing looks undersized at 430px. */
+@utility text-f-2xs {
+  font-size: clamp(0.5625rem, 2.4vw, 0.6875rem);
+  line-height: 1.25;
+}
+@utility text-f-xs {
+  font-size: clamp(0.625rem, 2.9vw, 0.75rem);
+  line-height: 1.35;
+}
+@utility text-f-sm {
+  font-size: clamp(0.75rem, 3.3vw, 0.875rem);
+  line-height: 1.4;
+}
+@utility text-f-base {
+  font-size: clamp(0.875rem, 3.9vw, 1rem);
+  line-height: 1.4;
+}
+@utility text-f-lg {
+  font-size: clamp(1rem, 4.4vw, 1.125rem);
+  line-height: 1.3;
+}
+@utility text-f-xl {
+  font-size: clamp(1.125rem, 5.6vw, 1.5rem);
+  line-height: 1.2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-drawer,
+  .animate-fade,
+  .animate-float,
+  .animate-rise,
+  .animate-sheet {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

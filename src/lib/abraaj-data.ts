@@ -25,6 +25,8 @@ export type Product = {
   category: "Bottles" | "Gallons" | "Alkaline" | "Essentials";
   image: string;
   blurb: string;
+  /** Coins earned when this product is added to the cart (loyalty rewards). */
+  coins: number;
 };
 
 export const products: Product[] = [
@@ -37,6 +39,7 @@ export const products: Product[] = [
     category: "Gallons",
     image: p5gal,
     blurb: "Home and office dispenser bottle, sealed and delivered fresh.",
+    coins: 60,
   },
   {
     id: "ml500",
@@ -47,6 +50,7 @@ export const products: Product[] = [
     category: "Bottles",
     image: p500,
     blurb: "The everyday bottle for desks, cars and gym bags.",
+    coins: 45,
   },
   {
     id: "l15",
@@ -57,6 +61,7 @@ export const products: Product[] = [
     category: "Bottles",
     image: p1500,
     blurb: "Family size bottle for the dinner table and long days out.",
+    coins: 55,
   },
   {
     id: "alk330",
@@ -67,6 +72,7 @@ export const products: Product[] = [
     category: "Alkaline",
     image: palk,
     blurb: "Balanced pH 8+ alkaline water in a compact bottle.",
+    coins: 90,
   },
   {
     id: "ml330",
@@ -77,6 +83,7 @@ export const products: Product[] = [
     category: "Bottles",
     image: p330,
     blurb: "Small, light and perfect for meetings and events.",
+    coins: 40,
   },
   {
     id: "ml200",
@@ -87,6 +94,7 @@ export const products: Product[] = [
     category: "Bottles",
     image: p200,
     blurb: "Mini bottles for kids, cafes and hospitality trays.",
+    coins: 70,
   },
   {
     id: "tissue",
@@ -97,6 +105,7 @@ export const products: Product[] = [
     category: "Essentials",
     image: ptissue,
     blurb: "Soft everyday tissues to add to your water delivery.",
+    coins: 80,
   },
 ];
 
@@ -116,6 +125,38 @@ export const plans: Plan[] = [
   { id: "monthly", name: "Monthly", every: "Every 30 days", discount: "Save 5%", note: "Light usage" },
 ];
 
+/**
+ * How long a subscription runs. A subscription line in the cart carries both a
+ * frequency (`plans` above — how often it's delivered) and a duration (below —
+ * for how long), which together give the start / end / next-delivery dates.
+ */
+export type Duration = {
+  id: string;
+  label: string;
+  value: number;
+  unit: "MONTH" | "YEAR";
+};
+
+export const durations: Duration[] = [
+  { id: "3m", label: "3 months", value: 3, unit: "MONTH" },
+  { id: "6m", label: "6 months", value: 6, unit: "MONTH" },
+  { id: "1y", label: "1 year", value: 1, unit: "YEAR" },
+  { id: "2y", label: "2 years", value: 2, unit: "YEAR" },
+];
+
+export const DEFAULT_DURATION = "1y";
+
+export function durationById(id: string | undefined) {
+  return durations.find((d) => d.id === id) ?? durations.find((d) => d.id === DEFAULT_DURATION)!;
+}
+
+/** Days between deliveries for each frequency plan. */
+export const PLAN_INTERVAL_DAYS: Record<string, number> = {
+  weekly: 7,
+  biweekly: 14,
+  monthly: 30,
+};
+
 /* ------------------------------------------------------------------ */
 /* Deal pricing                                                        */
 /* ------------------------------------------------------------------ */
@@ -124,6 +165,9 @@ export const plans: Plan[] = [
 export const DEAL_OFF = 10;
 /** Percentage knocked off the list price when the customer subscribes. */
 export const SUB_OFF = 15;
+
+/** Coins already earned from past orders, shown before anything is in the cart. */
+export const BASE_COINS = 480;
 
 export function money(n: number) {
   return (Math.round(n * 100) / 100).toFixed(2);

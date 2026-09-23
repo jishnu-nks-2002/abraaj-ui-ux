@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, HelpCircle, Info, Star, X } from "lucide-react";
+import { ChevronRight, HelpCircle, Info, Package, Search, Star, X } from "lucide-react";
 import video1 from "@/assets/side-video-1.mp4";
 import video1Poster from "@/assets/video/video-1-poster.jpg";
 import video2 from "@/assets/p1-video-white.mp4";
@@ -7,6 +7,10 @@ import logo from "@/assets/logo-2.png";
 import { APP_VERSION } from "@/lib/abraaj-data";
 
 const items = [
+  // Search now lives in the menu (moved off the top nav) so it's the first,
+  // most reachable action in the list.
+  { id: "search", label: "Search products", Icon: Search },
+  { id: "orders", label: "My orders", Icon: Package },
   { id: "about", label: "About Abraaj", Icon: Info },
   { id: "help", label: "Help & FAQs", Icon: HelpCircle },
   { id: "rate", label: "Rate the app", Icon: Star },
@@ -14,7 +18,7 @@ const items = [
 
 // Video banner carousel — add more clips here (e.g. video2 / video2Poster)
 // and they'll play in sequence, looping back to the first when done.
-const heroVideos = [
+const heroVideos: { src: string; poster?: string }[] = [
   { src: video1, },
   { src: video2, },
 ];

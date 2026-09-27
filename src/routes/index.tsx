@@ -812,7 +812,13 @@ function HomeScreen({
       <HomeCategories onSelect={onCategoryTile} badges={{ mosque: subCount }} />
 
       <div className="mt-7 flex items-center justify-between gap-2">
-        <h3 className="text-f-base font-bold text-foreground">Popular now</h3>
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="shrink-0 text-f-base font-bold text-foreground">Popular now</h3>
+          {/* Delivery-time badge — lets shoppers know these items ship within one day. */}
+          <span className="bg-aqua-soft flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-f-2xs font-bold whitespace-nowrap text-brand">
+            <Truck className="h-3 w-3 shrink-0" /> Delivered in 1 day
+          </span>
+        </div>
         <button onClick={onSeeAll} className="shrink-0 text-f-xs font-semibold text-brand">
           See all
         </button>

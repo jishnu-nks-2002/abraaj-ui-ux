@@ -5,6 +5,7 @@ import {
   lineUnitPrice,
   type CartLine,
 } from "@/lib/cart";
+import type { Coupon } from "@/lib/coupons";
 
 /* ================================================================== */
 /* Types                                                               */
@@ -87,7 +88,15 @@ export type Order = {
   address: Address;
   payment: PaymentMethod;
   items: OrderItem[];
-  pricing: { subtotal: number; saving: number; delivery: number; total: number };
+  pricing: {
+    subtotal: number;
+    saving: number;
+    delivery: number;
+    total: number;
+    /** E-coupon used on this order (absent on older orders). */
+    couponCode?: string;
+    couponDiscount?: number;
+  };
   coinsEarned: number;
 };
 
@@ -353,6 +362,7 @@ export type CheckoutInput = {
   customer: Customer;
   address: Address;
   payment: PaymentMethod;
+  coupon?: Coupon | null | undefined;
 };
 
 /** Expected delivery date for a one-time item placed at `placedAt`. */
@@ -432,7 +442,7 @@ function buildItem(line: CartLine, index: number, orderSeq: number, placedAt: Da
 }
 
 function buildOrder(input: CheckoutInput, seq: number, placedAt: Date): Order {
-  const pricing = cartPricing(input.lines);
+  const pricing = cartPricing(input.lines, input.coupon);
   const order: Order = {
     id: `ORD-${seq}`,
     createdAt: placedAt.toISOString(),
@@ -446,6 +456,9 @@ function buildOrder(input: CheckoutInput, seq: number, placedAt: Date): Order {
       saving: pricing.saving,
       delivery: pricing.delivery,
       total: pricing.total,
+      ...(pricing.appliedCoupon
+        ? { couponCode: pricing.appliedCoupon.code, couponDiscount: pricing.couponDiscount }
+        : {}),
     },
     coinsEarned: pricing.coins,
   };

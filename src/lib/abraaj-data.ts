@@ -5,9 +5,17 @@ import p500 from "@/assets/p500.png";
 import p1500 from "@/assets/p1500.png";
 import p5gal from "@/assets/p5gal.png";
 import ptissue from "@/assets/ptissue.png";
+import packGal5 from "@/assets/pack-gal5.png";
+import packMl500 from "@/assets/pack-ml500.png";
+import packL15 from "@/assets/pack-l15.png";
+import packAlk330 from "@/assets/pack-alk330.png";
+import packMl330 from "@/assets/pack-ml330.png";
+import packMl200 from "@/assets/pack-ml200.png";
+import packTissue from "@/assets/pack-tissue.png";
 import video1 from "@/assets/video/video-1.mp4";
 import video1Poster from "@/assets/video/video-1-poster.jpg";
 import banner1 from "@/assets/banner-1.png";
+import bannerCoupon from "@/assets/banner-coupon.jpg";
 import Banner2 from "@/assets/banner-2.png";
 import videop1 from "@/assets/p1-video-white.mp4";
 import sidevideo1 from "@/assets/side-video-1.mp4";
@@ -23,13 +31,19 @@ export type Product = {
   pack: string;
   price: number;
   category: "Bottles" | "Gallons" | "Alkaline" | "Essentials";
+  /** Main product photo (also used by carts, orders and anywhere a single image is needed). */
   image: string;
+  /**
+   * Every photo of the product, main one first. Cards and the product sheet auto-cycle
+   * through these, so adding a third photo is just another entry in `GALLERY` below.
+   */
+  images: string[];
   blurb: string;
   /** Coins earned when this product is added to the cart (loyalty rewards). */
   coins: number;
 };
 
-export const products: Product[] = [
+const baseProducts: Omit<Product, "images">[] = [
   {
     id: "gal5",
     name: "Abraaj 5 Gallon",
@@ -109,6 +123,27 @@ export const products: Product[] = [
   },
 ];
 
+/**
+ * Extra photos per product id (the main `image` is always shown first). The second photo
+ * is the real pack shot (multipack / carton + bottle) in src/assets/pack-*.png. The 500 ml
+ * still uses a generated pack shot until a real one is supplied. Append more imports here
+ * to add a third photo.
+ */
+const GALLERY: Record<string, string[]> = {
+  gal5: [packGal5],
+  ml500: [packMl500],
+  l15: [packL15],
+  alk330: [packAlk330],
+  ml330: [packMl330],
+  ml200: [packMl200],
+  tissue: [packTissue],
+};
+
+export const products: Product[] = baseProducts.map((p) => ({
+  ...p,
+  images: [p.image, ...(GALLERY[p.id] ?? [])],
+}));
+
 export const categories = ["All", "Bottles", "Gallons", "Alkaline", "Essentials"] as const;
 
 export type Plan = {
@@ -169,6 +204,18 @@ export const SUB_OFF = 15;
 /** Coins already earned from past orders, shown before anything is in the cart. */
 export const BASE_COINS = 480;
 
+/**
+ * Coin conversion rule. The app had no redemption rate, so this is the single place
+ * to configure it. Products earn 5 coins per AED spent (e.g. AED 12 -> 60 coins);
+ * 1 coin is worth AED 0.05 (20 coins = AED 1), i.e. a 5% cashback value.
+ */
+export const COIN_VALUE_AED = 0.05;
+
+/** Monetary value of a coin balance, in AED (rounded to fils). */
+export function coinsToAed(coins: number) {
+  return Math.round(coins * COIN_VALUE_AED * 100) / 100;
+}
+
 export function money(n: number) {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
@@ -200,6 +247,7 @@ export function byId(id: string) {
 export type HeroLink =
   | { type: "product"; productId: string }
   | { type: "category"; category: (typeof categories)[number] }
+  | { type: "coupons" }
   | { type: "tab"; tab: "home" | "shop" | "deals" | "plan" | "cart" | "account" };
 
 export type HeroSlide = {
@@ -227,6 +275,15 @@ export const heroSlides: HeroSlide[] = [
     image: products[0]!.image,
     imageAlt: "Abraaj 5 gallon bottle",
     link: { type: "tab", tab: "plan" },
+  },
+  {
+    badge: "E-coupon",
+    title: "Save on every sip",
+    subtitle: "Use code ABRAAJ10 for 10% off your order.",
+    ctaLabel: "View coupons",
+    image: bannerCoupon,
+    imageAlt: "Abraaj bottle splashing out of water",
+    link: { type: "coupons" },
   },
   {
     badge: "Free delivery",

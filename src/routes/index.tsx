@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownUp,
-  Bell,
   Check,
   ChevronRight,
   Coins,
@@ -28,11 +27,15 @@ import { Moments } from "@/components/abraaj/Moments";
 import { PromoBar } from "@/components/abraaj/PromoBar";
 import { HomeCategories, type HomeCategoryId } from "@/components/abraaj/HomeCategories";
 import { PopularCarousel } from "@/components/abraaj/PopularCarousel";
+import { CoinBalance } from "@/components/abraaj/CoinBalance";
+import { ProductCard } from "@/components/abraaj/ProductCard";
+import { CyclingImage, ImageDots, ProductImageStack, useImageCycle } from "@/components/abraaj/ProductImages";
 import { AboutScreen } from "@/components/abraaj/AboutScreen";
 import { MosqueScreen } from "@/components/abraaj/MosqueScreen";
-import { SubscriptionCartScreen, SubscriptionCheckoutScreen } from "@/components/abraaj/SubscriptionCart";
 import { NotificationsPanel } from "@/components/abraaj/NotificationsPanel";
 import { CheckoutScreen } from "@/components/abraaj/Checkout";
+import { CartCoupon, CouponsScreen } from "@/components/abraaj/Coupons";
+import { couponByCode, type Coupon } from "@/lib/coupons";
 import { OrderDetailsScreen, OrdersScreen, TrackOrderScreen } from "@/components/abraaj/Orders";
 import {
   cartPricing,
@@ -45,14 +48,15 @@ import {
   type CartLine,
 } from "@/lib/cart";
 import { ordersApi, type Order } from "@/lib/orders";
-import { subLineKey, subTotals, type SubLine } from "@/lib/mosque-data";
 import { initialNotifications, type AppNotification } from "@/lib/notifications-data";
 import {
   BASE_COINS,
+  coinsToAed,
   DEFAULT_DURATION,
   categories,
   durations,
   heroSlides,
+  money,
   plans,
   products,
   showcases,
@@ -82,7 +86,7 @@ export const Route = createFileRoute("/")({
 type Tab = "home" | "shop" | "deals" | "plan" | "cart" | "account";
 // Full-screen pages that aren't in the tab bar. Kept in the same `tab` state so
 // they share the header, bottom nav and cart state with the rest of the app.
-type Screen = Tab | "about" | "mosque" | "subcart" | "subcheckout" | "checkout" | "orders" | "order" | "track";
+type Screen = Tab | "about" | "mosque" | "checkout" | "orders" | "order" | "track" | "coupons";
 
 // Shared between the header logo and the travelling boot logo so the flight always
 // lands on the exact size and position of the real one, at any screen width.
@@ -114,11 +118,10 @@ function App() {
   // own read/unread list, independent of the cart and subscription state.
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>(initialNotifications);
-  // Subscription Cart — deliberately separate from `cart` above so the normal
-  // cart, its totals, badge and checkout are untouched by mosque subscriptions.
-  const [subCart, setSubCart] = useState<SubLine[]>([]);
   const [placeId, setPlaceId] = useState<string | null>(null);
   // Orders — one order per checkout, loaded from the orders service on the client.
+  // E-coupon picked by the customer (by code, so it survives re-renders cleanly).
+  const [couponCode, setCouponCode] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [justPlaced, setJustPlaced] = useState(false);
@@ -195,7 +198,8 @@ function App() {
   );
 
   // One pricing function for the cart and checkout, so their totals always match.
-  const pricing = cartPricing(cart);
+  const coupon = couponCode ? (couponByCode(couponCode) ?? null) : null;
+  const pricing = cartPricing(cart, coupon);
   const count = pricing.count;
 
   // Coins system: every product carries a coin value (see abraaj-data.ts). The
@@ -235,9 +239,14 @@ function App() {
     });
   }
 
+  function applyCoupon(c: Coupon) {
+    setCouponCode(c.code);
+  }
+
   function placeOrder(order: Order) {
     setOrders(ordersApi.list());
     setCart([]);
+    setCouponCode(null);
     setOrderId(order.id);
     setJustPlaced(true);
     openScreen("order");
@@ -257,40 +266,6 @@ function App() {
     );
   }
 
-  // ---- Subscription cart (mosque / place deliveries) ----
-  function addSub(product: Product, place: string, plan: string) {
-    setSubCart((c) => {
-      const key = subLineKey({ product, placeId: place, planId: plan });
-      const i = c.findIndex((l) => subLineKey(l) === key);
-      if (i > -1) return c.map((l, n) => (n === i ? { ...l, qty: l.qty + 1 } : l));
-      return [...c, { product, placeId: place, planId: plan, qty: 1 }];
-    });
-  }
-
-  function setSubQty(key: string, delta: number) {
-    setSubCart((c) =>
-      c.map((l) => (subLineKey(l) === key ? { ...l, qty: l.qty + delta } : l)).filter((l) => l.qty > 0),
-    );
-  }
-
-  // Changing frequency merges into an existing line for the same product/place/plan.
-  function setSubPlan(key: string, plan: string) {
-    setSubCart((c) => {
-      const line = c.find((l) => subLineKey(l) === key);
-      if (!line || line.planId === plan) return c;
-      const targetKey = subLineKey({ ...line, planId: plan });
-      const rest = c.filter((l) => subLineKey(l) !== key);
-      const j = rest.findIndex((l) => subLineKey(l) === targetKey);
-      if (j > -1) return rest.map((l, n) => (n === j ? { ...l, qty: l.qty + line.qty } : l));
-      return c.map((l) => (subLineKey(l) === key ? { ...l, planId: plan } : l));
-    });
-  }
-
-  function removeSub(key: string) {
-    setSubCart((c) => c.filter((l) => subLineKey(l) !== key));
-  }
-
-  const subCount = subTotals(subCart).count;
   const unreadNotifCount = notifications.filter((n) => !n.read).length;
 
   function markNotificationRead(id: string) {
@@ -349,6 +324,8 @@ function App() {
       if (p) setActive(p);
     } else if (link.type === "category") {
       goToShop(link.category === "All" ? undefined : link.category);
+    } else if (link.type === "coupons") {
+      openScreen("coupons");
     } else {
       setTab(link.tab as Tab);
     }
@@ -361,26 +338,31 @@ function App() {
           headerHidden ? "-translate-y-full" : "translate-y-0"
         } ${headerElevated ? "shadow-[0_8px_24px_-14px_rgba(13,42,110,0.4)]" : "shadow-none"}`}
       >
-        {/* Left group: menu + notifications now live together on the left.
-            Search moved into the hamburger menu; notifications moved here from
-            the right so it's never dropped on small screens. */}
+        {/* Left group: hamburger menu, then the cart in the spot the notification bell
+            used to occupy. Notifications and the other nav options live in the menu. */}
         <div className="flex shrink-0 items-center gap-1.5 xs:gap-2">
           <button
             aria-label="Open menu"
             onClick={() => setMenuOpen(true)}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-10 xs:w-10"
-          >
-            <Menu className="h-[18px] w-[18px]" />
-          </button>
-          <button
-            aria-label="Notifications"
-            onClick={() => setNotifOpen((v) => !v)}
             className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-10 xs:w-10"
           >
-            <Bell className="h-[18px] w-[18px]" />
+            <Menu className="h-[18px] w-[18px]" />
             {unreadNotifCount > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute top-0.5 right-0.5 h-2.5 w-2.5 rounded-full bg-aqua ring-2 ring-background"
+              />
+            )}
+          </button>
+          <button
+            aria-label={count > 0 ? `Cart, ${count} items` : "Cart"}
+            onClick={() => setTab("cart")}
+            className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-10 xs:w-10"
+          >
+            <ShoppingBag className="h-[18px] w-[18px]" />
+            {count > 0 && (
               <span className="absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[9px] font-bold text-primary-foreground">
-                {unreadNotifCount}
+                {count}
               </span>
             )}
           </button>
@@ -392,35 +374,14 @@ function App() {
         <img
           src={logo}
           alt="Abraaj Water"
-          className={`pointer-events-none absolute left-1/2 w-auto max-w-[36vw] -translate-x-1/2 object-contain transition-opacity duration-300 ${LOGO_SIZE} ${
+          className={`pointer-events-none absolute left-1/2 w-auto max-w-[30vw] -translate-x-1/2 object-contain transition-opacity duration-300 ${LOGO_SIZE} ${
             logoPhase === "done" ? "opacity-100" : "opacity-0"
           }`}
         />
 
-        {/* Right group: coins + cart. */}
-        <div className="flex shrink-0 items-center gap-1.5 xs:gap-2">
-          {/* Coins balance — always visible since it's part of the account status,
-              not an action, so it isn't dropped on small screens like Bell is. */}
-          <button
-            aria-label="Your coins"
-            onClick={() => setTab("account")}
-            className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-secondary px-2.5 text-brand xs:h-10 xs:px-3"
-          >
-            <Coins className="h-[15px] w-[15px] shrink-0" />
-            <span className="text-f-2xs font-bold whitespace-nowrap">{totalCoins}</span>
-          </button>
-          <button
-            aria-label="Cart"
-            onClick={() => setTab("cart")}
-            className="relative grid h-9 w-9 place-items-center rounded-full bg-secondary text-brand xs:h-10 xs:w-10"
-          >
-            <ShoppingBag className="h-[18px] w-[18px]" />
-            {count > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-primary-foreground">
-                {count}
-              </span>
-            )}
-          </button>
+        {/* Right group: coin balance — loops between coins and their AED value. */}
+        <div className="flex shrink-0 items-center">
+          <CoinBalance coins={totalCoins} onClick={() => setTab("account")} />
         </div>
       </header>
 
@@ -435,7 +396,10 @@ function App() {
             onCategory={goToShop}
             onHeroLink={handleHeroLink}
             onCategoryTile={handleHomeCategory}
-            subCount={subCount}
+            couponCode={couponCode}
+            onApplyCoupon={applyCoupon}
+            onRemoveCoupon={() => setCouponCode(null)}
+            onSeeCoupons={() => openScreen("coupons")}
           />
         )}
 
@@ -474,7 +438,8 @@ function App() {
                   product={p}
                   delay={i * 40}
                   onOpen={() => setActive(p)}
-                  onAdd={() => add(p)}
+                  onSubscribe={() => subscribeNow(p)}
+                  onOneTime={() => addOnceAndOpenCart(p)}
                 />
               ))}
             </div>
@@ -502,12 +467,29 @@ function App() {
             onShop={() => goToShop()}
             onSubscribe={() => setTab("plan")}
             onCheckout={() => openScreen("checkout")}
+            couponCode={couponCode}
+            onApplyCoupon={applyCoupon}
+            onRemoveCoupon={() => setCouponCode(null)}
+            onBrowseCoupons={() => openScreen("coupons")}
+          />
+        )}
+
+        {tab === "coupons" && (
+          <CouponsScreen
+            appliedCode={couponCode}
+            onApply={applyCoupon}
+            onRemove={() => setCouponCode(null)}
+            onBack={() => openScreen("home")}
+            onCart={() => openScreen("cart")}
+            onShop={() => goToShop()}
+            cartCount={count}
           />
         )}
 
         {tab === "checkout" && (
           <CheckoutScreen
             lines={cart}
+            coupon={coupon}
             onBack={() => openScreen("cart")}
             onShop={() => goToShop()}
             onPlaced={placeOrder}
@@ -569,33 +551,8 @@ function App() {
           <MosqueScreen
             placeId={placeId}
             onPlace={setPlaceId}
-            subLines={subCart}
-            onSubscribe={addSub}
-            onBuyOnce={(p) => add(p)}
-            onOpenSubCart={() => openScreen("subcart")}
+            onBuy={(p) => add(p)}
             onBack={() => openScreen("home")}
-          />
-        )}
-
-        {tab === "subcart" && (
-          <SubscriptionCartScreen
-            lines={subCart}
-            setQty={setSubQty}
-            setPlan={setSubPlan}
-            remove={removeSub}
-            onBrowse={() => openScreen("mosque")}
-            onCheckout={() => openScreen("subcheckout")}
-            onBack={() => openScreen("mosque")}
-          />
-        )}
-
-        {tab === "subcheckout" && (
-          <SubscriptionCheckoutScreen
-            lines={subCart}
-            onConfirm={() => setSubCart([])}
-            onBack={() => openScreen("subcart")}
-            onHome={() => openScreen("home")}
-            onMosque={() => openScreen("mosque")}
           />
         )}
       </main>
@@ -683,11 +640,14 @@ function App() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onViewAll={() => goToShop("All")}
+        notifCount={unreadNotifCount}
         onSelect={(id) => {
           if (id === "search") goToShop();
+          if (id === "notifications") setNotifOpen(true);
           if (id === "about") openScreen("about");
           if (id === "help") setTab("account");
           if (id === "orders") openScreen("orders");
+          if (id === "coupons") openScreen("coupons");
         }}
       />
 
@@ -712,7 +672,7 @@ function App() {
           aria-hidden="true"
           className={`pointer-events-none fixed z-50 w-auto object-contain transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
             logoPhase === "toHeader"
-              ? `${HEADER_TOP} ${LOGO_SIZE} left-1/2 max-w-[36vw] -translate-x-1/2 translate-y-0 opacity-100 drop-shadow-none`
+              ? `${HEADER_TOP} ${LOGO_SIZE} left-1/2 max-w-[30vw] -translate-x-1/2 translate-y-0 opacity-100 drop-shadow-none`
               : `top-1/2 left-1/2 h-[clamp(4.5rem,24vw,7rem)] max-w-[62vw] -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_10px_28px_rgba(15,58,138,0.35)] ${
                   logoMounted ? "scale-100 opacity-100" : "scale-90 opacity-0"
                 }`
@@ -771,7 +731,10 @@ function HomeScreen({
   onCategory,
   onHeroLink,
   onCategoryTile,
-  subCount,
+  couponCode,
+  onApplyCoupon,
+  onRemoveCoupon,
+  onSeeCoupons,
 }: {
   onSeeAll: () => void;
   onOpen: (p: Product) => void;
@@ -781,7 +744,10 @@ function HomeScreen({
   onCategory: (filter: string) => void;
   onHeroLink: (link: HeroLink) => void;
   onCategoryTile: (id: HomeCategoryId) => void;
-  subCount: number;
+  couponCode: string | null;
+  onApplyCoupon: (c: Coupon) => void;
+  onRemoveCoupon: () => void;
+  onSeeCoupons: () => void;
 }) {
   return (
     <div className="animate-rise">
@@ -809,7 +775,7 @@ function HomeScreen({
         })}
       </div>
 
-      <HomeCategories onSelect={onCategoryTile} badges={{ mosque: subCount }} />
+      <HomeCategories onSelect={onCategoryTile} />
 
       <div className="mt-7 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -824,10 +790,10 @@ function HomeScreen({
         </button>
       </div>
       {/* One continuous auto-sliding row (swipe / drag, slows on hover). Each product
-          appears once; the cards are the same ProductCard used everywhere else. */}
+          appears once; cards are the shared premium ProductCard. */}
       <PopularCarousel
         items={products}
-        renderItem={(p) => <ProductCard product={p} delay={0} onOpen={() => onOpen(p)} onAdd={() => onAdd(p)} />}
+        renderItem={(p) => <ProductCard product={p} onOpen={() => onOpen(p)} onSubscribe={() => onSubscribe(p)} onOneTime={() => onOneTime(p)} />}
       />
 
       {/* Category showcases: video / gradient banner + two subscribe-and-save cards,
@@ -1079,56 +1045,6 @@ function HeroCarousel({
   );
 }
 
-// Tight, aligned mobile grid: the image sits in a plain (no fill-color) fixed
-// aspect-square frame so rows line up regardless of name length, the pack size
-// sits over the image as a small badge, and the name/size block is flex-1 so
-// price + add button always land flush at the card's bottom.
-function ProductCard({
-  product,
-  onOpen,
-  onAdd,
-  delay,
-}: {
-  product: Product;
-  onOpen: () => void;
-  onAdd: () => void;
-  delay: number;
-}) {
-  return (
-    <div
-      className="card-soft animate-rise flex h-full min-w-0 flex-col rounded-2xl p-2.5 xs:p-3"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <button onClick={onOpen} className="flex w-full min-w-0 flex-1 flex-col text-left">
-        <div className="relative grid aspect-square place-items-center overflow-hidden rounded-xl">
-          <img
-            src={product.image}
-            alt={product.name}
-            className="max-h-[82%] w-auto object-contain"
-          />
-          <span className="absolute top-1.5 left-1.5 max-w-[80%] truncate rounded-full bg-secondary/90 px-2 py-0.5 text-[9px] font-semibold text-muted-foreground backdrop-blur-sm xs:text-f-2xs">
-            {product.pack}
-          </span>
-        </div>
-        <div className="mt-2.5 min-h-0 flex-1">
-          <p className="line-clamp-2 text-f-xs leading-snug font-bold text-foreground">{product.name}</p>
-          <p className="mt-0.5 truncate text-f-2xs text-muted-foreground">{product.size}</p>
-        </div>
-      </button>
-      <div className="mt-2.5 flex items-center justify-between gap-1">
-        <span className="truncate text-f-sm font-extrabold text-brand">AED {product.price}</span>
-        <button
-          aria-label={`Add ${product.name}`}
-          onClick={onAdd}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand text-primary-foreground transition-transform active:scale-90"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ProductSheet({
   product,
   planId,
@@ -1143,6 +1059,7 @@ function ProductSheet({
   onAdd: (sub?: string, durationId?: string) => void;
 }) {
   const [mode, setMode] = useState<"once" | "sub">("once");
+  const sheetImage = useImageCycle(product.images.length, product.id);
   const [durationId, setDurationId] = useState(DEFAULT_DURATION);
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-foreground/40">
@@ -1157,8 +1074,16 @@ function ProductSheet({
         >
           <X className="h-4 w-4" />
         </button>
-        <div className="grid h-[clamp(11rem,45vw,13rem)] place-items-center overflow-hidden rounded-2xl py-2">
-          <img src={product.image} alt={product.name} className="max-h-[78%] w-auto object-contain" />
+        {/* Fixed-height stage; the image is contained (never cropped) and centred.
+            Height scales with the viewport but is capped so the sheet's details and
+            CTA stay on screen on short phones and wide tablets alike. */}
+        <div className="relative mx-auto h-[clamp(12rem,min(60vw,34dvh),16rem)] w-full rounded-2xl bg-[linear-gradient(180deg,var(--aqua-soft)_0%,var(--background)_100%)] p-4">
+          <ProductImageStack
+            product={product}
+            index={sheetImage}
+            className="absolute inset-4 h-[calc(100%-2rem)] w-[calc(100%-2rem)] object-contain drop-shadow-[0_12px_16px_color-mix(in_oklab,var(--brand)_25%,transparent)]"
+          />
+          <ImageDots count={product.images.length} index={sheetImage} className="bottom-2" />
         </div>
         <h2 className="mt-5 text-f-lg font-extrabold text-foreground">{product.name}</h2>
         <p className="text-f-xs text-muted-foreground">
@@ -1313,6 +1238,10 @@ function CartScreen({
   onShop,
   onSubscribe,
   onCheckout,
+  couponCode,
+  onApplyCoupon,
+  onRemoveCoupon,
+  onBrowseCoupons,
 }: {
   cart: CartLine[];
   setQty: (i: number, d: number) => void;
@@ -1322,8 +1251,12 @@ function CartScreen({
   onShop: () => void;
   onSubscribe: () => void;
   onCheckout: () => void;
+  couponCode: string | null;
+  onApplyCoupon: (c: Coupon) => void;
+  onRemoveCoupon: () => void;
+  onBrowseCoupons: () => void;
 }) {
-  const { subtotal, saving, delivery, total, coins: earnedCoins } = pricing;
+  const { subtotal, saving, delivery, total, coins: earnedCoins, couponDiscount, couponReason } = pricing;
   if (cart.length === 0) {
     return (
       <section className="animate-rise pt-16 text-center">
@@ -1347,7 +1280,7 @@ function CartScreen({
       <div className="mt-1 flex items-center justify-between gap-2">
         <h1 className="text-f-xl font-extrabold tracking-tight text-foreground">Cart</h1>
         <span className="bg-aqua-soft flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-f-2xs font-bold text-brand">
-          <Coins className="h-3.5 w-3.5" /> {coins} coins
+          <Coins className="h-3.5 w-3.5" /> {coins} coins · AED {money(coinsToAed(coins))}
         </span>
       </div>
       <div className="mt-4 space-y-3">
@@ -1355,7 +1288,7 @@ function CartScreen({
           <div key={lineKey(l)} className="card-soft rounded-2xl p-2.5 xs:p-3">
           <div className="flex items-center gap-2.5 xs:gap-3">
             <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl">
-              <img src={l.product.image} alt={l.product.name} className="max-h-[86%] w-auto object-contain" />
+              <CyclingImage product={l.product} className="h-[86%] w-full" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-f-sm font-bold text-foreground">{l.product.name}</p>
@@ -1420,9 +1353,19 @@ function CartScreen({
         </button>
       </div>
 
+      <CartCoupon
+        appliedCode={couponCode}
+        discount={couponDiscount}
+        reason={couponReason}
+        onApply={onApplyCoupon}
+        onRemove={onRemoveCoupon}
+        onBrowse={onBrowseCoupons}
+      />
+
       <div className="card-soft mt-5 space-y-2 rounded-2xl p-4 text-f-sm">
         <Row label="Subtotal" value={formatPrice(subtotal)} />
         {saving > 0 && <Row label="Subscription saving" value={`− ${formatPrice(saving)}`} accent />}
+        {couponDiscount > 0 && <Row label={`Coupon ${couponCode}`} value={`− ${formatPrice(couponDiscount)}`} accent />}
         <Row label="Delivery" value={delivery === 0 ? "Free" : formatPrice(delivery)} />
         {earnedCoins > 0 && <Row label="Coins you'll earn" value={`+${earnedCoins}`} accent />}
         <div className="my-2 h-px bg-border" />
@@ -1485,7 +1428,9 @@ function AccountScreen({
           <Coins className="h-5 w-5 text-brand" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-f-sm font-bold text-foreground">{coins} coins</p>
+          <p className="text-f-sm font-bold text-foreground">
+            {coins} coins <span className="font-semibold text-muted-foreground">≈ AED {money(coinsToAed(coins))}</span>
+          </p>
           <p className="truncate text-f-xs text-muted-foreground">Earned from your orders</p>
         </div>
       </div>

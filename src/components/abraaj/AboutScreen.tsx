@@ -3,6 +3,7 @@ import aboutVideo from "@/assets/side-video-1.mp4";
 import aboutPoster from "@/assets/video/video-1-poster.jpg";
 import logo from "@/assets/logo-2.png";
 import { APP_VERSION, products } from "@/lib/abraaj-data";
+import { CyclingImage } from "@/components/abraaj/ProductImages";
 
 const range = [
   { category: "Bottles", title: "Bottles", text: "200 ml to 1.5 L, for desks, cars and dinner tables." },
@@ -96,11 +97,11 @@ export function AboutScreen({
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2.5 xs:gap-3">
         {range.map((r) => {
-          const img = products.find((p) => p.category === r.category)?.image;
+          const prod = products.find((p) => p.category === r.category);
           return (
             <div key={r.title} className="card-soft flex min-w-0 flex-col rounded-2xl p-3">
               <div className="flex h-20 items-center justify-center overflow-hidden">
-                {img && <img src={img} alt="" className="h-full w-auto max-w-full object-contain" />}
+                {prod && <CyclingImage product={prod} className="h-full w-full" />}
               </div>
               <p className="mt-2 text-f-sm font-bold text-foreground">{r.title}</p>
               <p className="text-f-2xs text-muted-foreground">{r.text}</p>

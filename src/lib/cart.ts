@@ -1,4 +1,5 @@
 import { DEFAULT_DURATION, durationById, plans, type Product } from "@/lib/abraaj-data";
+import { evaluateCoupon, type Coupon } from "@/lib/coupons";
 
 /* ------------------------------------------------------------------ */
 /* Mixed cart                                                          */
@@ -56,17 +57,37 @@ export function lineLabel(l: Pick<CartLine, "planId" | "durationId">) {
   return `${plan?.name ?? "Subscription"} · ${durationById(l.durationId).label}`;
 }
 
-export function cartPricing(lines: CartLine[]) {
+export function cartPricing(lines: CartLine[], coupon?: Coupon | null) {
   const subtotal = round2(lines.reduce((n, l) => n + l.product.price * l.qty, 0));
   const itemsTotal = round2(lines.reduce((n, l) => n + lineTotal(l), 0));
   const saving = round2(subtotal - itemsTotal);
   const delivery = subtotal > FREE_DELIVERY_OVER || subtotal === 0 ? 0 : DELIVERY_FEE;
+
+  // Optional e-coupon. `couponReason` explains why a picked coupon isn't applying yet.
+  const evaluation = coupon
+    ? evaluateCoupon(
+        coupon,
+        lines.map((l) => ({
+          productId: l.product.id,
+          category: l.product.category,
+          isSub: isSubscription(l),
+          amount: lineTotal(l),
+        })),
+        { delivery },
+      )
+    : null;
+  const couponDiscount = evaluation?.ok ? evaluation.discount : 0;
+  const couponReason = evaluation && !evaluation.ok ? evaluation.reason : null;
+
   return {
     count: lines.reduce((n, l) => n + l.qty, 0),
     subtotal,
     saving,
     delivery,
-    total: round2(itemsTotal + delivery),
+    couponDiscount,
+    couponReason,
+    appliedCoupon: evaluation?.ok ? (coupon ?? null) : null,
+    total: round2(Math.max(0, itemsTotal + delivery - couponDiscount)),
     coins: lines.reduce((n, l) => n + l.qty * l.product.coins, 0),
   };
 }

@@ -307,6 +307,9 @@ export function OrderDetailsScreen({
         {order.pricing.saving > 0 && (
           <SumRow label="Subscription saving" value={`− ${formatPrice(order.pricing.saving)}`} accent />
         )}
+        {order.pricing.couponDiscount ? (
+          <SumRow label={`Coupon ${order.pricing.couponCode}`} value={`− ${formatPrice(order.pricing.couponDiscount)}`} accent />
+        ) : null}
         <SumRow label="Delivery" value={order.pricing.delivery === 0 ? "Free" : formatPrice(order.pricing.delivery)} />
         {order.coinsEarned > 0 && <SumRow label="Coins earned" value={`+${order.coinsEarned}`} accent />}
         <div className="my-2 h-px bg-border" />

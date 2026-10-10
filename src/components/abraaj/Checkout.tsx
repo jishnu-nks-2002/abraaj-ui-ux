@@ -21,6 +21,7 @@ import {
   type Order,
   type PaymentMethod,
 } from "@/lib/orders";
+import type { Coupon } from "@/lib/coupons";
 import { BackLink, InfoRow, ProductThumb, SectionTitle, SumRow } from "@/components/abraaj/order-ui";
 
 /* ------------------------------------------------------------------ */
@@ -184,12 +185,14 @@ export function CheckoutScreen({
   onBack,
   onShop,
   onPlaced,
+  coupon,
 }: {
   lines: CartLine[];
   onBack: () => void;
   onShop: () => void;
   /** Called with the single order created for the whole cart. */
   onPlaced: (order: Order) => void;
+  coupon?: Coupon | null | undefined;
 }) {
   const [form, setForm] = useState<Form>({
     name: "Ahmed H.",
@@ -219,7 +222,7 @@ export function CheckoutScreen({
   const set = (id: FieldId) => (v: string) => setForm((f) => ({ ...f, [id]: v }));
   const blur = (id: FieldId) => () => setTouched((t) => ({ ...t, [id]: true }));
 
-  const pricing = cartPricing(lines);
+  const pricing = cartPricing(lines, coupon);
   const hasSub = lines.some(isSubscription);
   const hasOnce = lines.some((l) => !isSubscription(l));
 
@@ -266,6 +269,7 @@ export function CheckoutScreen({
           pincode: form.pincode.trim(),
         },
         payment,
+        coupon,
       });
       onPlaced(order);
     } catch {
@@ -408,6 +412,9 @@ export function CheckoutScreen({
           <div className="card-soft mt-4 space-y-2 rounded-2xl p-4 text-f-sm">
             <SumRow label="Subtotal" value={formatPrice(pricing.subtotal)} />
             {pricing.saving > 0 && <SumRow label="Subscription saving" value={`− ${formatPrice(pricing.saving)}`} accent />}
+            {pricing.couponDiscount > 0 && pricing.appliedCoupon && (
+              <SumRow label={`Coupon ${pricing.appliedCoupon.code}`} value={`− ${formatPrice(pricing.couponDiscount)}`} accent />
+            )}
             <SumRow label="Delivery" value={pricing.delivery === 0 ? "Free" : formatPrice(pricing.delivery)} />
             {pricing.coins > 0 && <SumRow label="Coins you'll earn" value={`+${pricing.coins}`} accent />}
             <div className="my-2 h-px bg-border" />

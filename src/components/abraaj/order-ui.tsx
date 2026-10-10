@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Check, ChevronLeft } from "lucide-react";
 import { byId } from "@/lib/abraaj-data";
+import { CyclingImage } from "@/components/abraaj/ProductImages";
 
 export function BackLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -62,11 +63,11 @@ export function StatusChip({ children, tone = "brand" }: { children: ReactNode; 
 }
 
 export function ProductThumb({ productId, name, size = "md" }: { productId: string; name: string; size?: "sm" | "md" }) {
-  const img = byId(productId)?.image;
+  const product = byId(productId);
   const box = size === "sm" ? "h-11 w-11" : "h-14 w-14 xs:h-16 xs:w-16";
   return (
     <div className={`grid shrink-0 place-items-center rounded-xl bg-secondary/60 ${box}`}>
-      {img && <img src={img} alt={name} className="max-h-[84%] w-auto object-contain" />}
+      {product && <CyclingImage product={product} className="h-[84%] w-full" />}
     </div>
   );
 }

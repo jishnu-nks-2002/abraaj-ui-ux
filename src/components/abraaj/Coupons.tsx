@@ -1,5 +1,18 @@
 import { useState } from "react";
-import { Check, ChevronRight, Copy, Droplets, Scissors, Ticket, X } from "lucide-react";
+import {
+  BadgeCheck,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Droplets,
+  MousePointerClick,
+  Scissors,
+  ShoppingBag,
+  Ticket,
+  X,
+} from "lucide-react";
+import couponBannerImg from "@/assets/banner-coupon.jpg";
 import { products } from "@/lib/abraaj-data";
 import { formatPrice } from "@/lib/cart";
 import {
@@ -10,7 +23,6 @@ import {
   coupons,
   type Coupon,
 } from "@/lib/coupons";
-import { BackLink } from "@/components/abraaj/order-ui";
 
 /* ------------------------------------------------------------------ */
 /* Shared bits                                                         */
@@ -311,6 +323,50 @@ export function CartCoupon({
 /* Full coupons screen                                                 */
 /* ------------------------------------------------------------------ */
 
+/** The "How e-coupons work" steps shown under the banner. Edit the copy here. */
+const couponSteps = [
+  { Icon: Ticket, title: "Pick a coupon", text: "Browse the coupons below and choose one that fits your order." },
+  {
+    Icon: MousePointerClick,
+    title: "Tap Apply or copy the code",
+    text: "Apply it in one tap, or copy the code and paste it in your cart.",
+  },
+  {
+    Icon: ShoppingBag,
+    title: "Add products to your cart",
+    text: "Check the coupon's products and minimum spend, then fill your cart.",
+  },
+  {
+    Icon: BadgeCheck,
+    title: "Check out and save",
+    text: "Your discount shows in the cart total. One coupon per order.",
+  },
+] as const;
+
+function CouponSteps() {
+  return (
+    <div className="mt-6">
+      <h2 className="text-f-base font-bold text-foreground">How e-coupons work</h2>
+      <ol className="mt-3 space-y-2.5">
+        {couponSteps.map(({ Icon, title, text }, i) => (
+          <li key={title} className="card-soft flex items-start gap-3 rounded-2xl p-3.5">
+            <div className="bg-aqua-soft relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-brand">
+              <Icon className="h-[18px] w-[18px]" />
+              <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-brand text-[9px] font-bold text-primary-foreground">
+                {i + 1}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-f-sm font-bold text-foreground">{title}</p>
+              <p className="text-f-xs text-muted-foreground">{text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export function CouponsScreen({
   appliedCode,
   onApply,
@@ -331,11 +387,34 @@ export function CouponsScreen({
   const applied = appliedCode ? couponByCode(appliedCode) : undefined;
   return (
     <section className="animate-rise">
-      <BackLink label="Back" onClick={onBack} />
-      <h1 className="mt-2 text-f-xl font-extrabold tracking-tight text-foreground">E-coupons</h1>
-      <p className="mt-0.5 text-f-sm text-muted-foreground">Tap Apply, then check out. One coupon per order.</p>
+      {/* Banner first: full-bleed, brand gradient with the splash photo fading in on the right. */}
+      <div className="mx-screen-neg relative mt-1 h-[clamp(11rem,50vw,14rem)] overflow-hidden bg-gradient-to-br from-brand via-brand to-aqua text-primary-foreground">
+        <img
+          src={couponBannerImg}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="absolute inset-y-0 right-0 h-full w-[66%] object-cover [mask-image:linear-gradient(to_right,transparent,black_45%)]"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.18),transparent_55%)]" />
+        <button
+          onClick={onBack}
+          className="absolute top-3 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 py-1.5 pr-3 pl-2 text-f-xs font-semibold text-brand shadow-sm backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+        >
+          <ChevronLeft className="h-4 w-4" /> Back
+        </button>
+        <div className="px-screen relative flex h-full max-w-[64%] flex-col justify-end pb-5">
+          <span className="flex items-center gap-1.5 text-f-2xs font-extrabold tracking-widest uppercase opacity-90">
+            <Ticket className="h-3.5 w-3.5" /> E-coupon
+          </span>
+          <h1 className="mt-1 text-f-xl leading-tight font-extrabold tracking-tight">E-coupons</h1>
+          <p className="mt-1 text-f-xs opacity-90">Save on every sip. Tap Apply, then check out.</p>
+        </div>
+      </div>
 
-      <div className="relative mt-4 overflow-hidden rounded-3xl bg-gradient-to-br from-brand via-brand to-aqua p-4 text-primary-foreground xs:p-5">
+      <CouponSteps />
+
+      <div className="relative mt-6 overflow-hidden rounded-3xl bg-gradient-to-br from-brand via-brand to-aqua p-4 text-primary-foreground xs:p-5">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.2),transparent_55%)]" />
         <Droplets className="pointer-events-none absolute -right-4 -bottom-5 h-28 w-28 text-white/10" />
         <div className="relative flex items-center gap-1.5 text-f-2xs font-extrabold tracking-widest uppercase opacity-90">

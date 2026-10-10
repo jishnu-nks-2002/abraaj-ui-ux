@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronLeft, MapPin, ShoppingBag } from "lucide-react";
+import mosqueVideo from "@/assets/side-video-2.mp4";
+import mosquePoster from "@/assets/video/video-1-poster.jpg";
 import {
   Select,
   SelectContent,
@@ -34,17 +36,37 @@ export function MosqueScreen({
 
   return (
     <section className="animate-rise">
-      <div className="mt-1 flex items-center">
+      {/* Banner at the very top of the page: full-bleed video, same treatment as About. */}
+      <div className="mx-screen-neg relative mt-1 h-[clamp(12rem,52vw,15rem)] overflow-hidden">
+        <video
+          className="absolute inset-0 h-full w-full object-cover"
+          src={mosqueVideo}
+          poster={mosquePoster}
+          preload="metadata"
+          autoPlay
+          muted
+          loop
+          playsInline
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-brand/90 via-brand/45 to-brand/15" />
         <button
           onClick={onBack}
-          className="-ml-1 inline-flex items-center gap-1 rounded-full py-1 pr-2 text-f-xs font-semibold text-muted-foreground"
+          className="absolute top-3 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 py-1.5 pr-3 pl-2 text-f-xs font-semibold text-brand shadow-sm backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
         >
           <ChevronLeft className="h-4 w-4" /> Home
         </button>
+        <div className="px-screen absolute inset-x-0 bottom-0 pb-5">
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-white/15 p-2.5 text-white ring-1 ring-white/30 backdrop-blur-sm">
+            <MosqueIcon />
+          </div>
+          <h1 className="mt-2.5 text-f-xl font-extrabold tracking-tight text-white">Mosque & community</h1>
+          <p className="mt-0.5 max-w-[88%] text-f-xs text-white/85">
+            Keep prayer halls and community spaces supplied with fresh water.
+          </p>
+        </div>
       </div>
 
-      <h1 className="mt-3 text-f-xl font-extrabold tracking-tight text-foreground">Mosque & community</h1>
-      <p className="mt-1 text-f-sm text-muted-foreground">
+      <p className="mt-4 text-f-sm text-muted-foreground">
         Choose where the water should go, then add the products it needs to your cart.
       </p>
 

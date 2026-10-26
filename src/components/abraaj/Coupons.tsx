@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Check, Copy, Droplets, Scissors, Ticket, X } from "lucide-react";
+import { Check, Copy, Droplets, Ticket, X } from "lucide-react";
 import { products } from "@/lib/abraaj-data";
 import { formatPrice } from "@/lib/cart";
-import { couponByCode, couponMatchesLine, couponMinLabel, couponUnitPrice, type Coupon } from "@/lib/coupons";
+import { couponMatchesLine, couponMinLabel, couponUnitPrice, type Coupon } from "@/lib/coupons";
 
 /* ------------------------------------------------------------------ */
 /* Shared bits                                                         */
@@ -136,104 +136,51 @@ export function CouponTicket({
 }
 
 /* ------------------------------------------------------------------ */
-/* Cart: apply a coupon by code or pick one                            */
+/* Cart: shows an already-applied coupon                               */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The "Have a discount code?" entry box was removed. This card now only appears
+ * when a coupon has been applied (for example from the E-coupons screen), so the
+ * customer can still see the saving and remove it.
+ */
 export function CartCoupon({
   appliedCode,
   discount,
   reason,
-  onApply,
   onRemove,
-  onBrowse,
 }: {
   appliedCode: string | null;
   discount: number;
   reason: string | null;
-  onApply: (c: Coupon) => void;
+  /** Kept optional so existing call sites that still pass them keep compiling. */
+  onApply?: (c: Coupon) => void;
   onRemove: () => void;
-  onBrowse: () => void;
+  onBrowse?: () => void;
 }) {
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  if (!appliedCode) return null;
 
-  function submit() {
-    const c = couponByCode(code);
-    if (!c) {
-      setError("That code isn't valid. Check it and try again.");
-      return;
-    }
-    if (new Date().getTime() > new Date(c.expiresAt).getTime()) {
-      setError("This coupon has expired.");
-      return;
-    }
-    setError(null);
-    setCode("");
-    onApply(c);
-  }
-
-  if (appliedCode) {
-    const working = discount > 0;
-    return (
-      <div className="card-soft mt-5 rounded-2xl p-3.5">
-        <div className="flex items-center gap-3">
-          <div className="bg-aqua-soft grid h-10 w-10 shrink-0 place-items-center rounded-full">
-            <Ticket className="h-5 w-5 text-brand" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-f-sm font-extrabold text-foreground">{appliedCode}</p>
-            <p className={`text-f-2xs font-semibold ${working ? "text-aqua" : "text-muted-foreground"}`}>
-              {working ? `You save ${formatPrice(discount)}` : (reason ?? "Coupon added")}
-            </p>
-          </div>
-          <button
-            aria-label="Remove coupon"
-            onClick={onRemove}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  const working = discount > 0;
   return (
     <div className="card-soft mt-5 rounded-2xl p-3.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-f-sm font-bold text-foreground">
-          <Scissors className="h-4 w-4 text-brand" /> Have a discount code?
-        </p>
-        <button onClick={onBrowse} className="text-f-xs font-semibold text-brand">
-          See codes
-        </button>
-      </div>
-      <div className="mt-2.5 flex gap-2">
-        <input
-          value={code}
-          onChange={(e) => {
-            setCode(e.target.value.toUpperCase());
-            setError(null);
-          }}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Enter code"
-          aria-label="Coupon code"
-          autoCapitalize="characters"
-          className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-f-sm font-semibold tracking-wider text-foreground placeholder:font-normal placeholder:tracking-normal focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
-        />
+      <div className="flex items-center gap-3">
+        <div className="bg-aqua-soft grid h-10 w-10 shrink-0 place-items-center rounded-full">
+          <Ticket className="h-5 w-5 text-brand" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-f-sm font-extrabold text-foreground">{appliedCode}</p>
+          <p className={`text-f-2xs font-semibold ${working ? "text-aqua" : "text-muted-foreground"}`}>
+            {working ? `You save ${formatPrice(discount)}` : (reason ?? "Coupon added")}
+          </p>
+        </div>
         <button
-          onClick={submit}
-          disabled={!code.trim()}
-          className="shrink-0 rounded-xl bg-brand px-4 text-f-sm font-bold text-primary-foreground disabled:opacity-50"
+          aria-label="Remove coupon"
+          onClick={onRemove}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
         >
-          Apply
+          <X className="h-4 w-4" />
         </button>
       </div>
-      {error && (
-        <p role="alert" className="mt-2 text-f-2xs font-semibold text-destructive">
-          {error}
-        </p>
-      )}
     </div>
   );
 }

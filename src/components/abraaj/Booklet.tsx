@@ -1330,7 +1330,7 @@ export function BookletScreen({
       </div>
 
       {/* promo codes (the existing discount-code coupons) */}
-      <div id="discount-codes" className="scroll-mt-20">
+      {/* <div id="discount-codes" className="scroll-mt-20">
         <h2 className="mt-8 text-f-base font-bold text-foreground">Discount codes</h2>
         <p className="mt-0.5 text-f-xs text-muted-foreground">One code per order, on top of any e-coupons. Codes don't apply to booklets.</p>
         <div className="mt-3 space-y-3">
@@ -1338,7 +1338,7 @@ export function BookletScreen({
             <PromoTicket key={c.id} coupon={c} detailed applied={appliedPromo === c.code} onApply={onApplyPromo} onRemove={onRemovePromo} />
           ))}
         </div>
-      </div>
+      </div> */}
     </section>
   );
 }

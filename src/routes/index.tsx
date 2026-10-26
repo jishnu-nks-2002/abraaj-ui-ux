@@ -105,7 +105,9 @@ type Screen = Tab | "about" | "mosque" | "subcart" | "subcheckout" | "checkout" 
 // Shared between the header logo and the travelling boot logo so the flight always
 // lands on the exact size and position of the real one, at any screen width.
 const HEADER_TOP = "top-[max(0.75rem,env(safe-area-inset-top))]";
-const LOGO_SIZE = "h-[clamp(2.25rem,10vw,3.25rem)]";
+const LOGO_SIZE = "h-[clamp(3.25rem,14vw,4.5rem)]";
+// Keeps the header row exactly as tall as the logo so the logo sits flush with the top padding.
+const LOGO_ROW = "min-h-[clamp(3.25rem,14vw,4.5rem)]";
 
 // Coin → Kuwaiti Dinar conversion used by the looping coin chip in the header.
 // Change this rate to whatever 1 coin is worth in KWD.
@@ -133,9 +135,9 @@ function CoinChip({ coins, onClick }: { coins: number; onClick: () => void }) {
     <button
       aria-label={showKwd ? `Your coins, worth ${kwd} Kuwaiti dinar` : `Your coins: ${coins}`}
       onClick={onClick}
-      className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-secondary px-2.5 text-brand xs:h-10 xs:px-3"
+      className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-secondary px-2.5 text-brand xs:h-8 xs:px-3"
     >
-      <Coins className="h-[15px] w-[15px] shrink-0" />
+      <Coins className="h-3 w-3 shrink-0" />
       <span key={showKwd ? "kwd" : "coins"} className="animate-fade text-f-2xs font-bold whitespace-nowrap">
         {showKwd ? `${kwd} KWD` : coins}
       </span>
@@ -482,13 +484,13 @@ function App() {
       >
         {/* Left group: menu + cart. Notifications now live inside the sidebar, and
             the cart button takes the spot the bell used to have. */}
-        <div className="flex shrink-0 items-center gap-1.5 xs:gap-2">
+        <div className={`flex shrink-0 items-center gap-1.5 xs:gap-2 ${LOGO_ROW}`}>
           <button
             aria-label="Open menu"
             onClick={() => setMenuOpen(true)}
-            className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-10 xs:w-10"
+            className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-8 xs:w-8"
           >
-            <Menu className="h-[18px] w-[18px]" />
+            <Menu className="h-3.5 w-3.5" />
             {/* Dot so unread notifications stay discoverable now that the bell is in the drawer. */}
             {unreadNotifCount > 0 && (
               <span className="absolute top-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-secondary bg-brand" />
@@ -497,11 +499,11 @@ function App() {
           <button
             aria-label="Cart"
             onClick={() => setTab("cart")}
-            className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-10 xs:w-10"
+            className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-8 xs:w-8"
           >
-            <ShoppingBag className="h-[18px] w-[18px]" />
+            <ShoppingBag className="h-3.5 w-3.5" />
             {count > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-primary-foreground">
+              <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[9px] font-bold text-primary-foreground">
                 {count}
               </span>
             )}
@@ -513,7 +515,7 @@ function App() {
         <img
           src={logo}
           alt="Abraaj Water"
-          className={`pointer-events-none absolute left-1/2 w-auto max-w-[30vw] -translate-x-1/2 object-contain transition-opacity duration-300 ${LOGO_SIZE} ${
+          className={`pointer-events-none absolute left-1/2 w-auto max-w-[42vw] -translate-x-1/2 object-contain transition-opacity duration-300 ${LOGO_SIZE} ${
             logoPhase === "done" ? "opacity-100" : "opacity-0"
           }`}
         />
@@ -524,11 +526,11 @@ function App() {
           <button
             aria-label="Profile"
             onClick={() => setTab("account")}
-            className={`grid h-9 w-9 shrink-0 place-items-center rounded-full xs:h-10 xs:w-10 ${
+            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full xs:h-8 xs:w-8 ${
               tab === "account" ? "bg-brand text-primary-foreground" : "bg-secondary text-brand"
             }`}
           >
-            <User className="h-[18px] w-[18px]" />
+            <User className="h-3.5 w-3.5" />
           </button>
         </div>
       </header>
@@ -913,7 +915,7 @@ function App() {
           aria-hidden="true"
           className={`pointer-events-none fixed z-50 w-auto object-contain transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
             logoPhase === "toHeader"
-              ? `${HEADER_TOP} ${LOGO_SIZE} left-1/2 max-w-[30vw] -translate-x-1/2 translate-y-0 opacity-100 drop-shadow-none`
+              ? `${HEADER_TOP} ${LOGO_SIZE} left-1/2 max-w-[42vw] -translate-x-1/2 translate-y-0 opacity-100 drop-shadow-none`
               : `top-1/2 left-1/2 h-[clamp(4.5rem,24vw,7rem)] max-w-[62vw] -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_10px_28px_rgba(15,58,138,0.35)] ${
                   logoMounted ? "scale-100 opacity-100" : "scale-90 opacity-0"
                 }`

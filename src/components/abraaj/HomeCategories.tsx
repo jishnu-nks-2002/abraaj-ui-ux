@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
 /**
- * Home "Categories" grid — six tiles, each a card-soft surface with a consistent
- * outline icon in an aqua icon chip. The parent decides what a tile does;
+ * Home "Categories" grid — six tiles, each a card-soft surface with the brand
+ * line illustration in an aqua icon chip. The parent decides what a tile does;
  * this component only renders and reports the tile id.
  */
 export type HomeCategoryId = "offers" | "bottles" | "mosque" | "gallons" | "subscription" | "tissue-ice";
@@ -10,7 +10,7 @@ export type HomeCategoryId = "offers" | "bottles" | "mosque" | "gallons" | "subs
 const tiles: { id: HomeCategoryId; label: string; Icon: () => ReactNode }[] = [
   { id: "offers", label: "Offers", Icon: OffersIcon },
   { id: "bottles", label: "Bottles", Icon: BottleIcon },
-  { id: "mosque", label: "Mosque", Icon: CatMosqueIcon },
+  { id: "mosque", label: "Mosque", Icon: MosqueIcon },
   { id: "gallons", label: "Gallons", Icon: GallonIcon },
   { id: "subscription", label: "Subscription", Icon: SubscriptionIcon },
   { id: "tissue-ice", label: "Tissue & Ice", Icon: TissueIceIcon },
@@ -32,7 +32,7 @@ export function HomeCategories({
       <h3 id="home-categories-title" className="text-f-base font-bold text-foreground">
         Categories
       </h3>
-      <div className="mt-4 grid grid-cols-3 gap-3 @lg:grid-cols-6 @lg:gap-3.5 @3xl:gap-5">
+      <div className="mt-3 grid grid-cols-3 gap-2 xs:gap-2.5 @lg:grid-cols-6 @lg:gap-3 @3xl:gap-4">
         {tiles.map(({ id, label, Icon }) => {
           const badge = badges[id] ?? 0;
           return (
@@ -41,15 +41,15 @@ export function HomeCategories({
               type="button"
               onClick={() => onSelect(id)}
               aria-label={badge > 0 ? `${label}, ${badge} in subscription` : label}
-              className="card-soft group relative flex min-w-0 flex-col items-center gap-2.5 rounded-2xl px-2 pt-4 pb-3.5 text-center transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] outline-none hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-[0_14px_28px_-16px_color-mix(in_oklab,var(--brand)_70%,transparent)] focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0 active:scale-[0.97] @lg:pt-5 @lg:pb-4 @3xl:gap-3 @3xl:pt-6 @3xl:pb-5"
+              className="card-soft group relative flex min-w-0 flex-col items-center gap-2 rounded-2xl px-1.5 pt-3.5 pb-3 text-center transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] outline-none hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-[0_14px_28px_-16px_color-mix(in_oklab,var(--brand)_70%,transparent)] focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0 active:scale-[0.97] @lg:pt-4 @lg:pb-3.5 @3xl:gap-2.5 @3xl:pt-5 @3xl:pb-4"
             >
               {/* Icon chip: aqua tint at rest, fills to brand on hover/focus. */}
-              <span className="bg-aqua-soft grid h-[clamp(3.25rem,15vw,3.75rem)] w-[clamp(3.25rem,15vw,3.75rem)] place-items-center rounded-2xl text-aqua transition-colors duration-300 group-hover:bg-brand group-hover:text-white group-focus-visible:bg-brand group-focus-visible:text-white @3xl:h-[4.5rem] @3xl:w-[4.5rem]">
-                <span className="h-[54%] w-[54%] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110">
+              <span className="bg-aqua-soft grid h-[clamp(2.75rem,12.5vw,3.25rem)] w-[clamp(2.75rem,12.5vw,3.25rem)] place-items-center rounded-2xl text-aqua transition-colors duration-300 group-hover:bg-brand group-hover:text-white group-focus-visible:bg-brand group-focus-visible:text-white @3xl:h-16 @3xl:w-16">
+                <span className="h-[72%] w-[72%] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110">
                   <Icon />
                 </span>
               </span>
-              <span className="w-full text-f-sm leading-tight font-semibold tracking-tight text-foreground">
+              <span className="w-full truncate text-f-xs font-bold text-foreground @3xl:text-f-sm">
                 {label}
               </span>
               {badge > 0 && (
@@ -66,95 +66,9 @@ export function HomeCategories({
 }
 
 /* ------------------------------------------------------------------ */
-/* Category icon set — one family: 24×24 grid, 1.75 rounded outline    */
+/* Line illustrations (64×64, stroke = currentColor)                   */
 /* ------------------------------------------------------------------ */
 
-function CatSvg({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-full w-full"
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  );
-}
-
-function OffersIcon() {
-  return (
-    <CatSvg>
-      <path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" />
-      <circle cx={7.5} cy={7.5} r={1} />
-      <path d="M10 14l4-4" />
-      <circle cx={10.2} cy={10.2} r={0.6} />
-      <circle cx={13.8} cy={13.8} r={0.6} />
-    </CatSvg>
-  );
-}
-
-function BottleIcon() {
-  return (
-    <CatSvg>
-      <path d="M10 2h4v3h-4z" />
-      <path d="M10 5L8.5 8v12.5A1.5 1.5 0 0 0 10 22h4a1.5 1.5 0 0 0 1.5-1.5V8L14 5" />
-      <path d="M8.5 12h7M8.5 17h7" />
-    </CatSvg>
-  );
-}
-
-function GallonIcon() {
-  return (
-    <CatSvg>
-      <path d="M8.5 2h5v3h-5z" />
-      <path d="M8.5 5L6 7.5v12.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V7.5L13.5 5" />
-      <path d="M6 12h11M17 8.5h1.5a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5H17" />
-      <path d="M11.5 14.5c-1 1.2-1.6 2-1.6 2.7a1.6 1.6 0 0 0 3.2 0c0-.7-.6-1.5-1.6-2.7z" />
-    </CatSvg>
-  );
-}
-
-function CatMosqueIcon() {
-  return (
-    <CatSvg>
-      <path d="M12 2v2" />
-      <path d="M6.5 12c0-3.5 2.5-6 5.5-7.5 3 1.5 5.5 4 5.5 7.5" />
-      <path d="M5 12h14v9H5z" />
-      <path d="M10 21v-3a2 2 0 0 1 4 0v3" />
-      <path d="M2 21h20M2.5 21v-8M21.5 21v-8" />
-    </CatSvg>
-  );
-}
-
-function SubscriptionIcon() {
-  return (
-    <CatSvg>
-      <path d="M17 2l4 4-4 4" />
-      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
-      <path d="M7 22l-4-4 4-4" />
-      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
-      <path d="M12 8.8c-1.3 1.6-2 2.6-2 3.4a2 2 0 0 0 4 0c0-.8-.7-1.8-2-3.4z" />
-    </CatSvg>
-  );
-}
-
-function TissueIceIcon() {
-  return (
-    <CatSvg>
-      <path d="M3 13h13v8H3z" />
-      <path d="M6.5 17h6" />
-      <path d="M7 13c0-2.5.8-4.2 1.8-6 1.2 1.8 1.4 3.2 3.2 6" />
-      <path d="M19 3v7M16 4.7l6 3.6M16 8.3l6-3.6" />
-    </CatSvg>
-  );
-}
-
-/* Brand line illustration — still used by MosqueScreen. */
 function Svg({ children }: { children: ReactNode }) {
   return (
     <svg
@@ -169,6 +83,50 @@ function Svg({ children }: { children: ReactNode }) {
     >
       {children}
     </svg>
+  );
+}
+
+/** Small fan mark used on bottle labels. */
+function Mark({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} strokeWidth={1.2}>
+      <path d="M0 4 L-4 -0.5 M0 4 L-2.3 -3 M0 4 L0 -4 M0 4 L2.3 -3 M0 4 L4 -0.5" />
+    </g>
+  );
+}
+
+function OffersIcon() {
+  return (
+    <Svg>
+      {/* two bottles */}
+      <path d="M15 12h6v3l3 3v12H12V18l3-3z" />
+      <path d="M31 12h6v3l3 3v12H28V18l3-3z" />
+      <path d="M14.5 10h7M30.5 10h7" />
+      <Mark x={18} y={24} />
+      <Mark x={34} y={24} />
+      {/* crate */}
+      <path d="M9 30h34v24H9z" />
+      <path d="M9 38h4v8H9M43 38h-4v8h4" />
+      {/* percent */}
+      <path d="M22 47l8-8" />
+      <circle cx={22.5} cy={40} r={1.6} />
+      <circle cx={29.5} cy={46} r={1.6} />
+      {/* tag */}
+      <path d="M41 22l7-3 8 8-3 7-8-8z" />
+      <circle cx={46.5} cy={22.5} r={1} />
+    </Svg>
+  );
+}
+
+function BottleIcon() {
+  return (
+    <Svg>
+      <path d="M27 6h10v5H27z" />
+      <path d="M27 11l-5 7v38a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V18l-5-7" />
+      <path d="M22 24h20M22 40h20" />
+      <path d="M22 46c3 1 5-1 7 0s4 1 6 0 5-1 7 0" />
+      <Mark x={32} y={32} s={1.2} />
+    </Svg>
   );
 }
 
@@ -191,3 +149,49 @@ export function MosqueIcon() {
   );
 }
 
+function GallonIcon() {
+  return (
+    <Svg>
+      <path d="M27 5h10v5H27z" />
+      <path d="M28 10v4c-8 1-14 5-14 10v31a4 4 0 0 0 4 4h28a4 4 0 0 0 4-4V24c0-5-6-9-14-10v-4" />
+      <path d="M14 30h36M14 48h36" />
+      <Mark x={32} y={40} s={1.2} />
+    </Svg>
+  );
+}
+
+function SubscriptionIcon() {
+  return (
+    <Svg>
+      {/* circular arrows */}
+      <path d="M14 36V22a10 10 0 0 1 10-10h32" />
+      <path d="M52 8l4 4-4 4" />
+      <path d="M50 28v14a10 10 0 0 1-10 10H8" />
+      <path d="M12 48l-4 4 4 4" />
+      {/* document */}
+      <path d="M22 18h20v26H22z" />
+      <path d="M26 34h9M26 38h6" />
+      <Mark x={32} y={26} s={1.1} />
+      {/* bell */}
+      <path d="M38 42c0-4 1.5-6 4-6s4 2 4 6l1.5 2h-11z" />
+      <path d="M41 46a1.2 1.2 0 0 0 2 0" />
+    </Svg>
+  );
+}
+
+function TissueIceIcon() {
+  return (
+    <Svg>
+      {/* ice cubes */}
+      <path d="M20 7l7 1-1 7-7-1z" />
+      <path d="M6 22l6-3 3 6-6 3z" />
+      <path d="M49 21l7 1-1 7-7-1z" />
+      <path d="M28 20l9-2 3 11-9 2z" />
+      {/* tissue */}
+      <path d="M25 36c1-4 3-8 3-12M38 36c1-3 3-6 5-9" />
+      {/* box */}
+      <path d="M10 36h44v18H10z" />
+      <Mark x={32} y={45} s={1.2} />
+    </Svg>
+  );
+}

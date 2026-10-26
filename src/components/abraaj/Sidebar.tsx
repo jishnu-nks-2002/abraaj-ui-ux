@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronRight, HelpCircle, Info, Package, Search, Star, Ticket, X } from "lucide-react";
+import { ChevronRight, HelpCircle, Info, Package, Search, Star, Ticket, X } from "lucide-react";
 import video1 from "@/assets/side-video-1.mp4";
 import video1Poster from "@/assets/video/video-1-poster.jpg";
 import video2 from "@/assets/p1-video-white.mp4";
@@ -10,9 +10,8 @@ const items = [
   // Search now lives in the menu (moved off the top nav) so it's the first,
   // most reachable action in the list.
   { id: "search", label: "Search products", Icon: Search },
-  { id: "notifications", label: "Notifications", Icon: Bell },
   { id: "orders", label: "My orders", Icon: Package },
-  { id: "coupons", label: "E-coupons", Icon: Ticket },
+  { id: "coupons", label: "E-coupon booklets", Icon: Ticket },
   { id: "about", label: "About Abraaj", Icon: Info },
   { id: "help", label: "Help & FAQs", Icon: HelpCircle },
   { id: "rate", label: "Rate the app", Icon: Star },
@@ -30,14 +29,11 @@ export function Sidebar({
   onClose,
   onViewAll,
   onSelect,
-  notifCount = 0,
 }: {
   open: boolean;
   onClose: () => void;
   onViewAll: () => void;
   onSelect?: (id: string) => void;
-  /** Unread notifications, shown as a count next to the Notifications row. */
-  notifCount?: number;
 }) {
   const [videoIndex, setVideoIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -160,11 +156,6 @@ export function Sidebar({
               <span className="min-w-0 flex-1 truncate text-f-sm font-semibold text-foreground">
                 {label}
               </span>
-              {id === "notifications" && notifCount > 0 && (
-                <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-brand px-1.5 text-[10px] font-bold text-primary-foreground">
-                  {notifCount}
-                </span>
-              )}
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           ))}

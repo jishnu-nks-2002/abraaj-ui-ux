@@ -339,3 +339,126 @@
     animation-iteration-count: 1 !important;
   }
 }
+/* ---- E-coupon booklet ------------------------------------------------- */
+/* Paper and ink for the booklet pages, derived from the brand colours. */
+:root {
+  --paper: oklch(0.993 0.006 95);
+  --paper-edge: oklch(0.93 0.012 90);
+  --ink-stamp: color-mix(in oklab, var(--brand) 85%, transparent);
+}
+
+/* 3D page turning. The book sets `perspective`; each leaf keeps its own 3D space
+   for its two faces and is stacked by z-index (set inline as pages turn). */
+.bk-book {
+  position: relative;
+  perspective: 2400px;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bk-leaf {
+  position: absolute;
+  top: 0;
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.45, 0.05, 0.25, 1);
+  will-change: transform;
+}
+.bk-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  container-type: inline-size;
+}
+.bk-face-back {
+  transform: rotateY(180deg);
+}
+/* Paper: warm white, a soft fold shadow along the spine, faint fibres. */
+.bk-paper {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.7), transparent 60%),
+    repeating-linear-gradient(0deg, rgba(120, 100, 60, 0.018) 0 1px, transparent 1px 3px);
+}
+.bk-face-front.bk-paper::before,
+.bk-face-back.bk-paper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.bk-face-front.bk-paper::before {
+  background: linear-gradient(90deg, rgba(30, 40, 80, 0.16), rgba(30, 40, 80, 0.04) 5%, transparent 12%);
+}
+.bk-face-back.bk-paper::before {
+  background: linear-gradient(270deg, rgba(30, 40, 80, 0.16), rgba(30, 40, 80, 0.04) 5%, transparent 12%);
+}
+/* Shading that sweeps across a page while it turns. */
+.bk-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  opacity: 0;
+}
+.bk-shade-front {
+  background: linear-gradient(90deg, rgba(10, 20, 60, 0.05), rgba(10, 20, 60, 0.32));
+  animation: bk-shade var(--bk-dur, 800ms) var(--bk-delay, 0ms) ease-in-out;
+}
+.bk-shade-back {
+  background: linear-gradient(270deg, rgba(10, 20, 60, 0.05), rgba(10, 20, 60, 0.3));
+  animation: bk-shade var(--bk-dur, 800ms) var(--bk-delay, 0ms) ease-in-out;
+}
+@keyframes bk-shade {
+  0% { opacity: 0; }
+  45% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* Stacked page edges peeking out under the open pages. */
+.bk-stack {
+  position: absolute;
+  top: 0;
+  background: var(--paper);
+  border-radius: 2px;
+}
+/* Rubber-stamp look for redeemed / expired coupons. */
+.bk-stamp {
+  border: 0.55cqw solid currentColor;
+  outline: 0.25cqw solid currentColor;
+  outline-offset: 0.6cqw;
+  mask-image: radial-gradient(circle at 30% 40%, #000 55%, rgba(0, 0, 0, 0.82) 70%, #000 85%);
+}
+/* Small 3D booklet used on the shelf, buy cards and home banner. */
+.bk-mini {
+  position: relative;
+  transform: perspective(700px) rotateY(-24deg) rotateX(6deg);
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.group:hover .bk-mini,
+.group:focus-visible .bk-mini {
+  transform: perspective(700px) rotateY(-10deg) rotateX(3deg) translateY(-2px);
+}
+@keyframes bk-viewer-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@utility animate-bk-in {
+  animation: bk-viewer-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-leaf,
+  .bk-book,
+  .bk-mini {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+  .bk-shade-front,
+  .bk-shade-back,
+  .animate-bk-in {
+    animation: none !important;
+  }
+}

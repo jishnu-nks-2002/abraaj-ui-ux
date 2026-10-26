@@ -262,7 +262,7 @@ export function PopularCarousel<T extends { id: string }>({
         style={{ transform: "translate3d(0,0,0)" }}
       >
         {(loopable ? rotated : items).map((item) => (
-          <div key={item.id} className="w-[46vw] max-w-[11.5rem] shrink-0">
+          <div key={item.id} className="w-[42vw] max-w-[10.5rem] shrink-0">
             {renderItem(item)}
           </div>
         ))}

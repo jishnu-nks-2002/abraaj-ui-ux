@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ImageDots, ProductImageStack, useImageCycle } from "@/components/abraaj/ProductImages";
 import { ChevronRight, Info } from "lucide-react";
 import {
   DEAL_OFF,
@@ -192,7 +191,6 @@ export function DealCard({
   delay?: number;
 }) {
   const { was, oneTime, sub } = dealPrices(product.price);
-  const imageIndex = useImageCycle(product.images.length, product.id);
 
   const [purchaseType, setPurchaseType] = useState<
     "onetime" | "subscribe"
@@ -229,26 +227,11 @@ export function DealCard({
         className="w-full min-w-0 text-left"
       >
         {/* Product image */}
-        {/* Brand-colour panel cut by a large white circle, product standing across the curve. */}
-        <div className="relative h-[clamp(8.5rem,38vw,10.5rem)] overflow-hidden rounded-xl">
-          <div aria-hidden="true" className="absolute inset-x-0 top-0 h-[66%] bg-brand" />
-          <div
-            aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-[66%] bg-[radial-gradient(90%_80%_at_20%_0%,rgba(255,255,255,0.22),transparent_60%)]"
-          />
-          <div
-            aria-hidden="true"
-            className="absolute top-[40%] left-1/2 aspect-square w-[135%] -translate-x-1/2 rounded-full bg-card"
-          />
-          <ProductImageStack
-            product={product}
-            index={imageIndex}
-            className="absolute inset-x-0 bottom-0.5 mx-auto h-[88%] w-[80%] scale-[1.08] object-contain drop-shadow-[0_12px_12px_rgba(10,25,70,0.35)]"
-          />
-          <ImageDots
-            count={product.images.length}
-            index={imageIndex}
-            className="bottom-1"
+        <div className="grid h-[clamp(7.5rem,32vw,9.5rem)] place-items-center overflow-hidden rounded-xl px-2 pt-6 pb-1">
+          <img
+            src={product.image}
+            alt={product.name}
+            className="max-h-full w-auto object-contain"
           />
         </div>
 

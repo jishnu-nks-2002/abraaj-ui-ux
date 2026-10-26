@@ -1,5 +1,5 @@
-import { DEFAULT_DURATION, durationById, plans, type Product } from "@/lib/abraaj-data";
-import { evaluateCoupon, type Coupon } from "@/lib/coupons";
+import { DEFAULT_DURATION, GALLON_ID, durationById, plans, type Product } from "@/lib/abraaj-data";
+import { evaluateCoupon, type Coupon, type CouponEvaluation } from "@/lib/coupons";
 
 /* ------------------------------------------------------------------ */
 /* Mixed cart                                                          */
@@ -50,34 +50,72 @@ export function lineTotal(l: CartLine) {
   return round2(lineUnitPrice(l) * l.qty);
 }
 
+/** Digital lines (e-coupon booklets) are issued at checkout, not delivered. */
+export function isDigital(l: Pick<CartLine, "product">) {
+  return Boolean(l.product.digital);
+}
+
+/**
+ * How many gallons in the cart can be paid with e-coupons: every one-time
+ * 5 Gallon unit. (Subscription deliveries are billed per delivery instead.)
+ */
+export function couponEligibleUnits(lines: CartLine[]) {
+  return lines.reduce((n, l) => (l.product.id === GALLON_ID && !isSubscription(l) ? n + l.qty : n), 0);
+}
+
 /** "Weekly · 1 year" for subscriptions, "One-time" otherwise. */
-export function lineLabel(l: Pick<CartLine, "planId" | "durationId">) {
+export function lineLabel(l: Pick<CartLine, "planId" | "durationId" | "product">) {
+  if (isDigital(l)) return "Digital booklet";
   if (!l.planId) return "One-time";
   const plan = plans.find((p) => p.id === l.planId);
   return `${plan?.name ?? "Subscription"} · ${durationById(l.durationId).label}`;
 }
 
-export function cartPricing(lines: CartLine[], coupon?: Coupon | null) {
+/**
+ * Prices the cart. `bookletCoupons` is how many e-coupons the customer wants to
+ * use; each pays for one one-time 5 Gallon bottle (extra coupons are ignored).
+ */
+export function cartPricing(lines: CartLine[], coupon?: Coupon | null, bookletCoupons = 0) {
   const subtotal = round2(lines.reduce((n, l) => n + l.product.price * l.qty, 0));
   const itemsTotal = round2(lines.reduce((n, l) => n + lineTotal(l), 0));
   const saving = round2(subtotal - itemsTotal);
-  const delivery = subtotal > FREE_DELIVERY_OVER || subtotal === 0 ? 0 : DELIVERY_FEE;
+  // Booklets are digital: they don't count towards (or trigger) the delivery fee.
+  const physical = round2(lines.filter((l) => !isDigital(l)).reduce((n, l) => n + l.product.price * l.qty, 0));
+  const delivery = physical > FREE_DELIVERY_OVER || physical === 0 ? 0 : DELIVERY_FEE;
 
-  // Optional e-coupon. `couponReason` explains why a picked coupon isn't applying yet.
-  const evaluation = coupon
-    ? evaluateCoupon(
-        coupon,
-        lines.map((l) => ({
-          productId: l.product.id,
-          category: l.product.category,
-          isSub: isSubscription(l),
-          amount: lineTotal(l),
-        })),
-        { delivery },
-      )
-    : null;
+  // E-coupons from a booklet: each one covers a whole one-time 5 Gallon bottle.
+  const gallonLine = lines.find((l) => l.product.id === GALLON_ID && !isSubscription(l));
+  const couponsUsed = Math.max(0, Math.min(Math.floor(bookletCoupons), couponEligibleUnits(lines)));
+  const bookletDiscount = gallonLine ? round2(couponsUsed * lineUnitPrice(gallonLine)) : 0;
+
+  // Optional promo code, on what's left to pay. Booklets are already discounted,
+  // so promo codes don't apply to them. `couponReason` explains why a picked
+  // promo code isn't applying yet.
+  const promoLines = lines
+    .filter((l) => !isDigital(l))
+    .map((l) => ({
+      productId: l.product.id,
+      category: l.product.category,
+      isSub: isSubscription(l),
+      amount: l === gallonLine ? round2(lineTotal(l) - bookletDiscount) : lineTotal(l),
+    }))
+    .filter((l) => l.amount > 0);
+  const evaluation: CouponEvaluation | null = !coupon
+    ? null
+    : promoLines.length === 0 && lines.length > 0 && coupon.kind !== "delivery"
+      ? {
+          ok: false,
+          discount: 0,
+          reason: lines.some(isDigital)
+            ? "Promo codes don't apply to booklets, which are already discounted."
+            : "Your e-coupons already cover everything in the cart.",
+        }
+      : evaluateCoupon(coupon, promoLines, { delivery });
   const couponDiscount = evaluation?.ok ? evaluation.discount : 0;
   const couponReason = evaluation && !evaluation.ok ? evaluation.reason : null;
+
+  // Gallons paid with e-coupons already earned their coins when the booklet was bought.
+  const coins = lines.reduce((n, l) => n + l.qty * l.product.coins, 0) - couponsUsed * (gallonLine?.product.coins ?? 0);
 
   return {
     count: lines.reduce((n, l) => n + l.qty, 0),
@@ -87,7 +125,10 @@ export function cartPricing(lines: CartLine[], coupon?: Coupon | null) {
     couponDiscount,
     couponReason,
     appliedCoupon: evaluation?.ok ? (coupon ?? null) : null,
-    total: round2(Math.max(0, itemsTotal + delivery - couponDiscount)),
-    coins: lines.reduce((n, l) => n + l.qty * l.product.coins, 0),
+    /** E-coupons actually applied, and the gallons' value they cover. */
+    couponsUsed,
+    bookletDiscount,
+    total: round2(Math.max(0, itemsTotal + delivery - couponDiscount - bookletDiscount)),
+    coins,
   };
 }

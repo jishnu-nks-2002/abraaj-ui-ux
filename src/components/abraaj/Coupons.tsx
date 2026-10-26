@@ -1,28 +1,8 @@
 import { useState } from "react";
-import {
-  BadgeCheck,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Droplets,
-  MousePointerClick,
-  Scissors,
-  ShoppingBag,
-  Ticket,
-  X,
-} from "lucide-react";
-import couponBannerImg from "@/assets/banner-coupon.jpg";
+import { Check, Copy, Droplets, Scissors, Ticket, X } from "lucide-react";
 import { products } from "@/lib/abraaj-data";
 import { formatPrice } from "@/lib/cart";
-import {
-  couponByCode,
-  couponMatchesLine,
-  couponMinLabel,
-  couponUnitPrice,
-  coupons,
-  type Coupon,
-} from "@/lib/coupons";
+import { couponByCode, couponMatchesLine, couponMinLabel, couponUnitPrice, type Coupon } from "@/lib/coupons";
 
 /* ------------------------------------------------------------------ */
 /* Shared bits                                                         */
@@ -156,67 +136,6 @@ export function CouponTicket({
 }
 
 /* ------------------------------------------------------------------ */
-/* Home: e-coupon banner + swipeable tickets                           */
-/* ------------------------------------------------------------------ */
-
-export function CouponBanner({
-  appliedCode,
-  onApply,
-  onRemove,
-  onSeeAll,
-}: {
-  appliedCode: string | null;
-  onApply: (c: Coupon) => void;
-  onRemove: () => void;
-  onSeeAll: () => void;
-}) {
-  const featured = coupons[0]!;
-  return (
-    <section className="mt-6" aria-label="E-coupons">
-      <button
-        onClick={onSeeAll}
-        className="relative block w-full overflow-hidden rounded-3xl bg-gradient-to-br from-brand via-brand to-aqua p-4 text-left text-primary-foreground shadow-[0_14px_30px_-18px_rgba(13,42,110,0.7)] focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none xs:p-5"
-      >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.2),transparent_55%)]" />
-        <Droplets className="pointer-events-none absolute -right-4 -bottom-5 h-28 w-28 text-white/10" />
-        {/* Ticket notches echo the coupon cards below */}
-        <span className="absolute top-1/2 -left-2.5 h-5 w-5 -translate-y-1/2 rounded-full bg-background" />
-        <span className="absolute top-1/2 -right-2.5 h-5 w-5 -translate-y-1/2 rounded-full bg-background" />
-
-        <div className="relative flex items-center gap-1.5 text-f-2xs font-extrabold tracking-widest uppercase opacity-90">
-          <Ticket className="h-3.5 w-3.5" /> E-coupon
-        </div>
-        <p className="relative mt-1.5 text-f-xl font-extrabold tracking-tight">Save on every sip</p>
-        <p className="relative mt-0.5 max-w-[16rem] text-f-xs opacity-90">
-          Digital coupons for bottles, gallons, alkaline and subscriptions.
-        </p>
-        <div className="relative mt-3 flex items-center gap-2">
-          <span className="rounded-lg border border-dashed border-white/60 bg-white/15 px-2.5 py-1.5 text-f-xs font-extrabold tracking-wider">
-            {featured.code}
-          </span>
-          <span className="inline-flex items-center gap-0.5 text-f-xs font-bold">
-            View all coupons <ChevronRight className="h-4 w-4" />
-          </span>
-        </div>
-      </button>
-
-      <div className="mx-screen-neg px-screen no-scrollbar mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
-        {coupons.map((c) => (
-          <CouponTicket
-            key={c.id}
-            coupon={c}
-            compact
-            applied={appliedCode === c.code}
-            onApply={onApply}
-            onRemove={onRemove}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Cart: apply a coupon by code or pick one                            */
 /* ------------------------------------------------------------------ */
 
@@ -283,10 +202,10 @@ export function CartCoupon({
     <div className="card-soft mt-5 rounded-2xl p-3.5">
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-f-sm font-bold text-foreground">
-          <Scissors className="h-4 w-4 text-brand" /> Have a coupon?
+          <Scissors className="h-4 w-4 text-brand" /> Have a discount code?
         </p>
         <button onClick={onBrowse} className="text-f-xs font-semibold text-brand">
-          Browse coupons
+          See codes
         </button>
       </div>
       <div className="mt-2.5 flex gap-2">
@@ -316,138 +235,5 @@ export function CartCoupon({
         </p>
       )}
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Full coupons screen                                                 */
-/* ------------------------------------------------------------------ */
-
-/** The "How e-coupons work" steps shown under the banner. Edit the copy here. */
-const couponSteps = [
-  { Icon: Ticket, title: "Pick a coupon", text: "Browse the coupons below and choose one that fits your order." },
-  {
-    Icon: MousePointerClick,
-    title: "Tap Apply or copy the code",
-    text: "Apply it in one tap, or copy the code and paste it in your cart.",
-  },
-  {
-    Icon: ShoppingBag,
-    title: "Add products to your cart",
-    text: "Check the coupon's products and minimum spend, then fill your cart.",
-  },
-  {
-    Icon: BadgeCheck,
-    title: "Check out and save",
-    text: "Your discount shows in the cart total. One coupon per order.",
-  },
-] as const;
-
-function CouponSteps() {
-  return (
-    <div className="mt-6">
-      <h2 className="text-f-base font-bold text-foreground">How e-coupons work</h2>
-      <ol className="mt-3 space-y-2.5">
-        {couponSteps.map(({ Icon, title, text }, i) => (
-          <li key={title} className="card-soft flex items-start gap-3 rounded-2xl p-3.5">
-            <div className="bg-aqua-soft relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-brand">
-              <Icon className="h-[18px] w-[18px]" />
-              <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-brand text-[9px] font-bold text-primary-foreground">
-                {i + 1}
-              </span>
-            </div>
-            <div className="min-w-0">
-              <p className="text-f-sm font-bold text-foreground">{title}</p>
-              <p className="text-f-xs text-muted-foreground">{text}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
-export function CouponsScreen({
-  appliedCode,
-  onApply,
-  onRemove,
-  onBack,
-  onCart,
-  onShop,
-  cartCount,
-}: {
-  appliedCode: string | null;
-  onApply: (c: Coupon) => void;
-  onRemove: () => void;
-  onBack: () => void;
-  onCart: () => void;
-  onShop: () => void;
-  cartCount: number;
-}) {
-  const applied = appliedCode ? couponByCode(appliedCode) : undefined;
-  return (
-    <section className="animate-rise">
-      {/* Banner first: full-bleed, brand gradient with the splash photo fading in on the right. */}
-      <div className="mx-screen-neg relative mt-1 h-[clamp(11rem,50vw,14rem)] overflow-hidden bg-gradient-to-br from-brand via-brand to-aqua text-primary-foreground">
-        <img
-          src={couponBannerImg}
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-          className="absolute inset-y-0 right-0 h-full w-[66%] object-cover [mask-image:linear-gradient(to_right,transparent,black_45%)]"
-        />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.18),transparent_55%)]" />
-        <button
-          onClick={onBack}
-          className="absolute top-3 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 py-1.5 pr-3 pl-2 text-f-xs font-semibold text-brand shadow-sm backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
-        >
-          <ChevronLeft className="h-4 w-4" /> Back
-        </button>
-        <div className="px-screen relative flex h-full max-w-[64%] flex-col justify-end pb-5">
-          <span className="flex items-center gap-1.5 text-f-2xs font-extrabold tracking-widest uppercase opacity-90">
-            <Ticket className="h-3.5 w-3.5" /> E-coupon
-          </span>
-          <h1 className="mt-1 text-f-xl leading-tight font-extrabold tracking-tight">E-coupons</h1>
-          <p className="mt-1 text-f-xs opacity-90">Save on every sip. Tap Apply, then check out.</p>
-        </div>
-      </div>
-
-      <CouponSteps />
-
-      <div className="relative mt-6 overflow-hidden rounded-3xl bg-gradient-to-br from-brand via-brand to-aqua p-4 text-primary-foreground xs:p-5">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.2),transparent_55%)]" />
-        <Droplets className="pointer-events-none absolute -right-4 -bottom-5 h-28 w-28 text-white/10" />
-        <div className="relative flex items-center gap-1.5 text-f-2xs font-extrabold tracking-widest uppercase opacity-90">
-          <Ticket className="h-3.5 w-3.5" /> {applied ? "Coupon applied" : `${coupons.length} coupons available`}
-        </div>
-        <p className="relative mt-1.5 text-f-lg font-extrabold">
-          {applied ? `${applied.code} · ${applied.title}` : "Pick a coupon and save"}
-        </p>
-        <div className="relative mt-3">
-          <button
-            onClick={applied && cartCount > 0 ? onCart : onShop}
-            className="rounded-full bg-white px-4 py-2 text-f-xs font-extrabold text-brand"
-          >
-            {applied && cartCount > 0 ? "Go to cart" : "Shop now"}
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-5 space-y-3">
-        {coupons.map((c) => (
-          <CouponTicket
-            key={c.id}
-            coupon={c}
-            detailed
-            applied={appliedCode === c.code}
-            onApply={onApply}
-            onRemove={onRemove}
-          />
-        ))}
-      </div>
-      <p className="mt-4 text-center text-f-2xs text-muted-foreground">
-        Discounts are calculated on the price you pay and shown at checkout.
-      </p>
-    </section>
   );
 }

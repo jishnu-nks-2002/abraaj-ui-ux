@@ -5,17 +5,9 @@ import p500 from "@/assets/p500.png";
 import p1500 from "@/assets/p1500.png";
 import p5gal from "@/assets/p5gal.png";
 import ptissue from "@/assets/ptissue.png";
-import packGal5 from "@/assets/pack-gal5.png";
-import packMl500 from "@/assets/pack-ml500.png";
-import packL15 from "@/assets/pack-l15.png";
-import packAlk330 from "@/assets/pack-alk330.png";
-import packMl330 from "@/assets/pack-ml330.png";
-import packMl200 from "@/assets/pack-ml200.png";
-import packTissue from "@/assets/pack-tissue.png";
 import video1 from "@/assets/video/video-1.mp4";
 import video1Poster from "@/assets/video/video-1-poster.jpg";
 import banner1 from "@/assets/banner-1.png";
-import bannerCoupon from "@/assets/banner-coupon.jpg";
 import Banner2 from "@/assets/banner-2.png";
 import videop1 from "@/assets/p1-video-white.mp4";
 import sidevideo1 from "@/assets/side-video-1.mp4";
@@ -30,20 +22,31 @@ export type Product = {
   size: string;
   pack: string;
   price: number;
-  category: "Bottles" | "Gallons" | "Alkaline" | "Essentials";
-  /** Main product photo (also used by carts, orders and anywhere a single image is needed). */
+  category: "Bottles" | "Gallons" | "Alkaline" | "Essentials" | "Booklets";
   image: string;
-  /**
-   * Every photo of the product, main one first. Cards and the product sheet auto-cycle
-   * through these, so adding a third photo is just another entry in `GALLERY` below.
-   */
-  images: string[];
   blurb: string;
   /** Coins earned when this product is added to the cart (loyalty rewards). */
   coins: number;
+  /** Digital products are issued instantly at checkout: no delivery, no delivery fee. */
+  digital?: boolean;
+  /** Set on e-coupon booklets: what the booklet contains. */
+  booklet?: BookletSpec;
 };
 
-const baseProducts: Omit<Product, "images">[] = [
+/** An e-coupon booklet: `coupons` prepaid coupons, each worth one unit of `redeemsFor`. */
+export type BookletSpec = {
+  /** "Starter", "Family", "Office" */
+  label: string;
+  coupons: number;
+  /** Product id each coupon pays for (the 5 Gallon refill). */
+  redeemsFor: string;
+  validityMonths: number;
+  /** Cover colours, used for the booklet art and the 3D cover. */
+  cover: { from: string; to: string; foil: string };
+  tag?: string;
+};
+
+export const products: Product[] = [
   {
     id: "gal5",
     name: "Abraaj 5 Gallon",
@@ -123,28 +126,85 @@ const baseProducts: Omit<Product, "images">[] = [
   },
 ];
 
-/**
- * Extra photos per product id (the main `image` is always shown first). The second photo
- * is the real pack shot (multipack / carton + bottle) in src/assets/pack-*.png. The 500 ml
- * still uses a generated pack shot until a real one is supplied. Append more imports here
- * to add a third photo.
- */
-const GALLERY: Record<string, string[]> = {
-  gal5: [packGal5],
-  ml500: [packMl500],
-  l15: [packL15],
-  alk330: [packAlk330],
-  ml330: [packMl330],
-  ml200: [packMl200],
-  tissue: [packTissue],
-};
-
-export const products: Product[] = baseProducts.map((p) => ({
-  ...p,
-  images: [p.image, ...(GALLERY[p.id] ?? [])],
-}));
-
 export const categories = ["All", "Bottles", "Gallons", "Alkaline", "Essentials"] as const;
+
+/* ------------------------------------------------------------------ */
+/* E-coupon booklets                                                   */
+/* ------------------------------------------------------------------ */
+/*
+ * Booklets are ordinary catalogue products (so the cart, checkout, orders and
+ * coins all work unchanged), kept out of `products` so they don't appear in the
+ * shop grid. Each coupon inside pays for one 5 Gallon bottle.
+ */
+
+/** The product an e-coupon pays for. */
+export const GALLON_ID = "gal5";
+
+/** Small booklet illustration (SVG data URI) used as the product image in cart and orders. */
+function bookletArt(count: number, cover: BookletSpec["cover"]) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${cover.from}"/><stop offset="1" stop-color="${cover.to}"/></linearGradient></defs>
+<rect x="30" y="16" width="66" height="92" rx="6" fill="#d9e4f5"/>
+<rect x="26" y="13" width="66" height="92" rx="6" fill="#eef3fb"/>
+<rect x="22" y="10" width="66" height="92" rx="6" fill="url(#g)"/>
+<rect x="22" y="10" width="7" height="92" rx="3" fill="#000" opacity=".16"/>
+<rect x="36" y="22" width="44" height="13" rx="6.5" fill="#fff" opacity=".95"/>
+<text x="58" y="31.5" font-family="Arial,sans-serif" font-size="8" font-weight="700" fill="${cover.from}" text-anchor="middle">ABRAAJ</text>
+<text x="58" y="70" font-family="Arial,sans-serif" font-size="30" font-weight="800" fill="#fff" text-anchor="middle">${count}</text>
+<text x="58" y="82" font-family="Arial,sans-serif" font-size="7" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing=".6">COUPONS</text>
+<rect x="36" y="89" width="44" height="3" rx="1.5" fill="${cover.foil}"/>
+</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+const bookletSpecs: (BookletSpec & { id: string; price: number; coins: number })[] = [
+  {
+    id: "bk10",
+    label: "Starter",
+    coupons: 10,
+    redeemsFor: GALLON_ID,
+    validityMonths: 6,
+    price: 110,
+    coins: 300,
+    cover: { from: "#2a63c9", to: "#3fb3e3", foil: "#bfe8ff" },
+  },
+  {
+    id: "bk20",
+    label: "Family",
+    coupons: 20,
+    redeemsFor: GALLON_ID,
+    validityMonths: 12,
+    price: 210,
+    coins: 650,
+    cover: { from: "#1c2f86", to: "#2f8fd6", foil: "#e9c46a" },
+    tag: "Most popular",
+  },
+  {
+    id: "bk30",
+    label: "Office",
+    coupons: 30,
+    redeemsFor: GALLON_ID,
+    validityMonths: 12,
+    price: 300,
+    coins: 1000,
+    cover: { from: "#0f1d52", to: "#23468f", foil: "#e9c46a" },
+    tag: "Best value",
+  },
+];
+
+export const bookletProducts: Product[] = bookletSpecs.map(({ id, price, coins, ...spec }) => ({
+  id,
+  name: `${spec.label} gallon booklet`,
+  size: `${spec.coupons} coupons`,
+  pack: `Valid ${spec.validityMonths} months`,
+  price,
+  category: "Booklets",
+  image: bookletArt(spec.coupons, spec.cover),
+  blurb: `${spec.coupons} e-coupons, each good for one Abraaj 5 Gallon bottle.`,
+  coins,
+  digital: true,
+  booklet: spec,
+}));
 
 export type Plan = {
   id: string;
@@ -204,18 +264,6 @@ export const SUB_OFF = 15;
 /** Coins already earned from past orders, shown before anything is in the cart. */
 export const BASE_COINS = 480;
 
-/**
- * Coin conversion rule. The app had no redemption rate, so this is the single place
- * to configure it. Products earn 5 coins per AED spent (e.g. AED 12 -> 60 coins);
- * 1 coin is worth AED 0.05 (20 coins = AED 1), i.e. a 5% cashback value.
- */
-export const COIN_VALUE_AED = 0.05;
-
-/** Monetary value of a coin balance, in AED (rounded to fils). */
-export function coinsToAed(coins: number) {
-  return Math.round(coins * COIN_VALUE_AED * 100) / 100;
-}
-
 export function money(n: number) {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
@@ -229,7 +277,7 @@ export function dealPrices(price: number) {
 }
 
 export function byId(id: string) {
-  return products.find((p) => p.id === id);
+  return products.find((p) => p.id === id) ?? bookletProducts.find((p) => p.id === id);
 }
 
 /* ------------------------------------------------------------------ */
@@ -247,7 +295,6 @@ export function byId(id: string) {
 export type HeroLink =
   | { type: "product"; productId: string }
   | { type: "category"; category: (typeof categories)[number] }
-  | { type: "coupons" }
   | { type: "tab"; tab: "home" | "shop" | "deals" | "plan" | "cart" | "account" };
 
 export type HeroSlide = {
@@ -275,15 +322,6 @@ export const heroSlides: HeroSlide[] = [
     image: products[0]!.image,
     imageAlt: "Abraaj 5 gallon bottle",
     link: { type: "tab", tab: "plan" },
-  },
-  {
-    badge: "E-coupon",
-    title: "Save on every sip",
-    subtitle: "Use code ABRAAJ10 for 10% off your order.",
-    ctaLabel: "View coupons",
-    image: bannerCoupon,
-    imageAlt: "Abraaj bottle splashing out of water",
-    link: { type: "coupons" },
   },
   {
     badge: "Free delivery",

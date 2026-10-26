@@ -1,4 +1,4 @@
-import { CalendarDays, Check, CreditCard, MapPin, Package, Repeat, Truck, User } from "lucide-react";
+import { BookOpen, CalendarDays, Check, CreditCard, MapPin, Package, Repeat, Ticket, Truck, User } from "lucide-react";
 import { formatPrice } from "@/lib/cart";
 import {
   DELIVERY_LABEL,
@@ -41,7 +41,7 @@ function orderTone(s: OrderStatus) {
 }
 
 function itemTone(item: OrderItem) {
-  if (item.delivery?.status === "DELIVERED") return "done" as const;
+  if (item.digital || item.delivery?.status === "DELIVERED") return "done" as const;
   if (item.subscription?.status === "COMPLETED") return "muted" as const;
   if (item.subscription) return "aqua" as const;
   return "brand" as const;
@@ -135,7 +135,9 @@ export function OrdersScreen({
                       {item.quantity > 1 && <span className="font-semibold text-muted-foreground"> ×{item.quantity}</span>}
                     </p>
                     <p className="flex items-center gap-1 truncate text-f-2xs text-muted-foreground">
-                      {item.subscription ? (
+                      {item.digital ? (
+                        <Ticket className="h-3 w-3 shrink-0 text-brand" />
+                      ) : item.subscription ? (
                         <Repeat className="h-3 w-3 shrink-0 text-aqua" />
                       ) : (
                         <Truck className="h-3 w-3 shrink-0 text-brand" />
@@ -180,7 +182,25 @@ export function OrdersScreen({
 /* Order details                                                        */
 /* ------------------------------------------------------------------ */
 
-function DetailItem({ item }: { item: OrderItem }) {
+/** "Open booklet" buttons for the booklets a digital item issued. */
+function BookletLinks({ item, onOpenBooklet }: { item: OrderItem; onOpenBooklet?: ((id: string) => void) | undefined }) {
+  if (!item.digital || !onOpenBooklet) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {item.digital.bookletIds.map((id) => (
+        <button
+          key={id}
+          onClick={() => onOpenBooklet(id)}
+          className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3.5 py-2 text-f-xs font-bold text-primary-foreground focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          <BookOpen className="h-3.5 w-3.5" /> Open booklet {id}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DetailItem({ item, onOpenBooklet }: { item: OrderItem; onOpenBooklet?: ((id: string) => void) | undefined }) {
   const sub = item.subscription;
   const del = item.delivery;
   return (
@@ -200,8 +220,26 @@ function DetailItem({ item }: { item: OrderItem }) {
       </div>
 
       <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-f-xs">
-        <InfoRow label="Purchase type" value={sub ? "Subscription" : "One-time"} />
+        <InfoRow label="Purchase type" value={item.digital ? "Digital booklet" : sub ? "Subscription" : "One-time"} />
         <InfoRow label="Quantity" value={item.quantity} />
+        {item.digital && (
+          <>
+            <InfoRow label="Issued" value={formatDateTime(item.digital.issuedAt)} />
+            <InfoRow label={item.digital.bookletIds.length === 1 ? "Booklet" : "Booklets"} value={item.digital.bookletIds.join(", ")} />
+          </>
+        )}
+        {item.paidWithCoupons?.length ? (
+          <InfoRow
+            label="Paid with e-coupons"
+            value={
+              <span>
+                {item.paidWithCoupons.length} of {item.quantity}
+                <span className="block font-mono text-f-2xs font-semibold text-muted-foreground">{item.paidWithCoupons.join(", ")}</span>
+              </span>
+            }
+            strong
+          />
+        ) : null}
         <InfoRow label="Unit price" value={`${formatPrice(item.unitPrice)}${sub ? " per delivery" : ""}`} />
         {del && (
           <>
@@ -226,6 +264,7 @@ function DetailItem({ item }: { item: OrderItem }) {
         )}
         <InfoRow label="Tracking no." value={<span className="font-mono tracking-tight">{item.trackingNumber}</span>} />
       </dl>
+      <BookletLinks item={item} onOpenBooklet={onOpenBooklet} />
     </li>
   );
 }
@@ -235,13 +274,18 @@ export function OrderDetailsScreen({
   justPlaced,
   onBack,
   onTrack,
+  onOpenBooklet,
 }: {
   order: Order;
   justPlaced?: boolean;
   onBack: () => void;
   onTrack: () => void;
+  /** Opens a booklet bought in this order. */
+  onOpenBooklet?: (id: string) => void;
 }) {
   const { customer, address } = order;
+  const digitalOnly = order.items.every((i) => i.digital);
+  const issued = order.items.flatMap((i) => i.digital?.bookletIds ?? []);
   return (
     <section className="animate-rise @container">
       <BackLink label="My orders" onClick={onBack} />
@@ -252,9 +296,12 @@ export function OrderDetailsScreen({
             <Check className="h-5 w-5" strokeWidth={2.6} />
           </div>
           <div className="min-w-0">
-            <p className="text-f-sm font-bold text-foreground">Order placed</p>
+            <p className="text-f-sm font-bold text-foreground">{issued.length ? "Order placed · booklet ready" : "Order placed"}</p>
             <p className="text-f-2xs text-muted-foreground">
-              A receipt is on its way to {customer.email}. Every item below has its own tracking.
+              A receipt is on its way to {customer.email}.{" "}
+              {issued.length
+                ? "Your e-coupons are in your account now and can be used on your next 5 Gallon order."
+                : "Every item below has its own tracking."}
             </p>
           </div>
         </div>
@@ -282,12 +329,16 @@ export function OrderDetailsScreen({
         </div>
         <div className="card-soft rounded-2xl p-3.5">
           <SectionTitle Icon={MapPin}>Address</SectionTitle>
-          <dl className="mt-2 space-y-1.5 text-f-xs">
-            <InfoRow label="Address" value={address.line} />
-            <InfoRow label="City" value={address.city} />
-            <InfoRow label="State" value={address.state} />
-            <InfoRow label="Pincode" value={address.pincode} />
-          </dl>
+          {digitalOnly ? (
+            <p className="mt-2 text-f-xs text-muted-foreground">Nothing to deliver: booklets are issued straight to your account.</p>
+          ) : (
+            <dl className="mt-2 space-y-1.5 text-f-xs">
+              <InfoRow label="Address" value={address.line} />
+              <InfoRow label="City" value={address.city} />
+              <InfoRow label="State" value={address.state} />
+              <InfoRow label="Pincode" value={address.pincode} />
+            </dl>
+          )}
         </div>
       </div>
 
@@ -295,7 +346,7 @@ export function OrderDetailsScreen({
         <SectionTitle Icon={Package}>Products</SectionTitle>
         <ul className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-2.5 @2xl:grid-cols-2">
           {order.items.map((item) => (
-            <DetailItem key={item.id} item={item} />
+            <DetailItem key={item.id} item={item} onOpenBooklet={onOpenBooklet} />
           ))}
         </ul>
       </div>
@@ -307,6 +358,13 @@ export function OrderDetailsScreen({
         {order.pricing.saving > 0 && (
           <SumRow label="Subscription saving" value={`− ${formatPrice(order.pricing.saving)}`} accent />
         )}
+        {order.pricing.bookletDiscount ? (
+          <SumRow
+            label={`E-coupons (${order.pricing.bookletCoupons?.length ?? 0} × 5 Gallon)`}
+            value={`− ${formatPrice(order.pricing.bookletDiscount)}`}
+            accent
+          />
+        ) : null}
         {order.pricing.couponDiscount ? (
           <SumRow label={`Coupon ${order.pricing.couponCode}`} value={`− ${formatPrice(order.pricing.couponDiscount)}`} accent />
         ) : null}
@@ -380,7 +438,7 @@ function Fact({ label, value, wide }: { label: string; value: string; wide?: boo
   );
 }
 
-function TrackItem({ item }: { item: OrderItem }) {
+function TrackItem({ item, onOpenBooklet }: { item: OrderItem; onOpenBooklet?: ((id: string) => void) | undefined }) {
   const del = item.delivery;
   const sub = item.subscription;
   return (
@@ -390,9 +448,15 @@ function TrackItem({ item }: { item: OrderItem }) {
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-f-sm font-extrabold text-foreground">{item.product.name}</h2>
           <p className="flex items-center gap-1 text-f-2xs text-muted-foreground">
-            {sub ? <Repeat className="h-3 w-3 shrink-0 text-aqua" /> : <Truck className="h-3 w-3 shrink-0 text-brand" />}
+            {item.digital ? (
+              <Ticket className="h-3 w-3 shrink-0 text-brand" />
+            ) : sub ? (
+              <Repeat className="h-3 w-3 shrink-0 text-aqua" />
+            ) : (
+              <Truck className="h-3 w-3 shrink-0 text-brand" />
+            )}
             <span className="truncate">
-              {sub ? `${durationText(sub)} subscription` : "One-time purchase"}, qty {item.quantity}
+              {item.digital ? "Digital booklet" : sub ? `${durationText(sub)} subscription` : "One-time purchase"}, qty {item.quantity}
             </span>
           </p>
           <div className="mt-1.5">
@@ -400,6 +464,17 @@ function TrackItem({ item }: { item: OrderItem }) {
           </div>
         </div>
       </div>
+
+      {item.digital && (
+        <div className="bg-aqua-soft mt-3 flex items-center gap-3 rounded-xl px-3 py-2.5">
+          <Ticket className="h-5 w-5 shrink-0 text-brand" />
+          <div className="min-w-0">
+            <p className="text-f-2xs text-muted-foreground">Issued instantly</p>
+            <p className="text-f-sm font-extrabold text-brand">{formatDateTime(item.digital.issuedAt)} · nothing to deliver</p>
+          </div>
+        </div>
+      )}
+      <BookletLinks item={item} onOpenBooklet={onOpenBooklet} />
 
       {del && (
         <>
@@ -457,10 +532,12 @@ export function TrackOrderScreen({
   order,
   onBack,
   onView,
+  onOpenBooklet,
 }: {
   order: Order;
   onBack: () => void;
   onView: () => void;
+  onOpenBooklet?: (id: string) => void;
 }) {
   return (
     <section className="animate-rise @container">
@@ -475,7 +552,7 @@ export function TrackOrderScreen({
 
       <ul className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3 @3xl:grid-cols-2 @3xl:items-start">
         {order.items.map((item) => (
-          <TrackItem key={item.id} item={item} />
+          <TrackItem key={item.id} item={item} onOpenBooklet={onOpenBooklet} />
         ))}
       </ul>
 

@@ -2,10 +2,20 @@ import { byId, durationById, PLAN_INTERVAL_DAYS, plans } from "@/lib/abraaj-data
 import {
   ONE_TIME_DELIVERY_DAYS,
   cartPricing,
+  couponEligibleUnits,
+  isDigital,
   lineUnitPrice,
   type CartLine,
 } from "@/lib/cart";
+import { GALLON_ID } from "@/lib/abraaj-data";
+import { bookletsApi } from "@/lib/booklets";
 import type { Coupon } from "@/lib/coupons";
+import { HOUR, MIN, addDays, addMonths, atHour, startOfDay } from "@/lib/dates";
+import { hasStorage, read, write } from "@/lib/storage";
+
+// Date helpers moved to lib/dates.ts (shared with the booklet service); re-exported
+// so existing imports from "@/lib/orders" keep working.
+export { addDays, addMonths, dayAndDate, formatDate, formatDateTime, relativeDay, startOfDay } from "@/lib/dates";
 
 /* ================================================================== */
 /* Types                                                               */
@@ -74,6 +84,10 @@ export type OrderItem = {
   price: number;
   delivery: ItemDelivery | null;
   subscription: ItemSubscription | null;
+  /** Digital items (e-coupon booklets): issued instantly, no delivery. */
+  digital?: { kind: "BOOKLET"; bookletIds: string[]; issuedAt: string };
+  /** E-coupon codes that paid for some of this item's units (5 Gallon only). */
+  paidWithCoupons?: string[];
 };
 
 export type Customer = { name: string; phone: string; email: string };
@@ -96,6 +110,9 @@ export type Order = {
     /** E-coupon used on this order (absent on older orders). */
     couponCode?: string;
     couponDiscount?: number;
+    /** Booklet e-coupons redeemed on this order, and the gallons' value they covered. */
+    bookletCoupons?: string[];
+    bookletDiscount?: number;
   };
   coinsEarned: number;
 };
@@ -161,12 +178,14 @@ export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
 
 /** "One-time" or "1 year subscription". */
 export function purchaseLabel(item: OrderItem) {
+  if (item.digital) return "Digital booklet";
   if (!item.subscription) return "One-time";
   return `${durationById(item.subscription.durationId).label} subscription`;
 }
 
 /** Status of a single item, whatever its purchase type. */
 export function itemStatusLabel(item: OrderItem) {
+  if (item.digital) return "Issued";
   if (item.delivery) return DELIVERY_LABEL[item.delivery.status];
   if (item.subscription) return `Subscription ${SUBSCRIPTION_STATUS_LABEL[item.subscription.status].toLowerCase()}`;
   return "";
@@ -174,76 +193,12 @@ export function itemStatusLabel(item: OrderItem) {
 
 /** Whether an item has reached a settled, positive state (for colouring chips). */
 export function itemIsSettled(item: OrderItem) {
-  return item.delivery?.status === "DELIVERED" || item.subscription?.status === "ACTIVE";
+  return Boolean(item.digital) || item.delivery?.status === "DELIVERED" || item.subscription?.status === "ACTIVE";
 }
 
 /* ================================================================== */
 /* Dates                                                               */
 /* ================================================================== */
-
-const MIN = 60_000;
-const HOUR = 60 * MIN;
-
-export function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-export function addDays(d: Date, n: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
-/** Adds calendar months, clamping 31 Jan + 1 month to 28/29 Feb. */
-export function addMonths(d: Date, n: number) {
-  const x = new Date(d);
-  const day = x.getDate();
-  x.setDate(1);
-  x.setMonth(x.getMonth() + n);
-  const last = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
-  x.setDate(Math.min(day, last));
-  return x;
-}
-
-function atHour(d: Date, h: number) {
-  const x = new Date(d);
-  x.setHours(h, 0, 0, 0);
-  return x;
-}
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const pad2 = (n: number) => String(n).padStart(2, "0");
-
-/** "23 Sep 2026" — built by hand so every browser/locale prints the same thing. */
-export function formatDate(iso: string | Date) {
-  const d = new Date(iso);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-/** "23 Sep, 14:05" */
-export function formatDateTime(iso: string | Date) {
-  const d = new Date(iso);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
-/** "Today", "Tomorrow", "Yesterday" or "Thu 24 Sep". */
-export function relativeDay(iso: string | Date, now = new Date()) {
-  const d = new Date(iso);
-  const diff = Math.round((startOfDay(d).getTime() - startOfDay(now).getTime()) / (24 * HOUR));
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  if (diff === -1) return "Yesterday";
-  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-}
-
-/** "Tomorrow, 24 Sep 2026" when close, otherwise just "2 Oct 2026". */
-export function dayAndDate(iso: string | Date, now = new Date()) {
-  const rel = relativeDay(iso, now);
-  return ["Today", "Tomorrow", "Yesterday"].includes(rel) ? `${rel}, ${formatDate(iso)}` : formatDate(iso);
-}
 
 /** Deliveries happen in a morning run and are complete by this hour. */
 const DELIVERED_BY_HOUR = 13;
@@ -335,6 +290,8 @@ function syncItem(item: OrderItem, placedAt: Date, now: Date): OrderItem {
 export function deriveOrderStatus(items: OrderItem[]): OrderStatus {
   const oneTimes = items.filter((i) => i.delivery);
   const subs = items.filter((i) => i.subscription);
+  // Digital-only orders (just booklets) are complete the moment they're placed.
+  if (oneTimes.length === 0 && subs.length === 0) return "DELIVERED";
   const allDelivered = oneTimes.every((i) => i.delivery!.status === "DELIVERED");
   const anyDelivered = oneTimes.some((i) => i.delivery!.status === "DELIVERED");
   const nothingMoved =
@@ -363,6 +320,8 @@ export type CheckoutInput = {
   address: Address;
   payment: PaymentMethod;
   coupon?: Coupon | null | undefined;
+  /** Booklet e-coupon codes to redeem, one per one-time 5 Gallon bottle. */
+  bookletCoupons?: string[] | undefined;
 };
 
 /** Expected delivery date for a one-time item placed at `placedAt`. */
@@ -385,7 +344,9 @@ export function subscriptionDates(line: Pick<CartLine, "planId" | "durationId">,
   };
 }
 
-function buildItem(line: CartLine, index: number, orderSeq: number, placedAt: Date): OrderItem {
+type ItemExtras = { bookletIds?: string[] | undefined; paidWithCoupons?: string[] | undefined };
+
+function buildItem(line: CartLine, index: number, orderSeq: number, placedAt: Date, extras: ItemExtras = {}): OrderItem {
   const unitPrice = lineUnitPrice(line);
   const base = {
     id: `${orderSeq}-${index + 1}`,
@@ -402,9 +363,20 @@ function buildItem(line: CartLine, index: number, orderSeq: number, placedAt: Da
     price: Math.round(unitPrice * line.qty * 100) / 100,
   };
 
+  if (isDigital(line)) {
+    return {
+      ...base,
+      purchaseType: "ONE_TIME",
+      delivery: null,
+      subscription: null,
+      digital: { kind: "BOOKLET", bookletIds: extras.bookletIds ?? [], issuedAt: placedAt.toISOString() },
+    };
+  }
+
   if (!line.planId) {
     return {
       ...base,
+      ...(extras.paidWithCoupons?.length ? { paidWithCoupons: extras.paidWithCoupons } : {}),
       purchaseType: "ONE_TIME",
       delivery: {
         status: "ORDER_PLACED",
@@ -441,8 +413,9 @@ function buildItem(line: CartLine, index: number, orderSeq: number, placedAt: Da
   };
 }
 
-function buildOrder(input: CheckoutInput, seq: number, placedAt: Date): Order {
-  const pricing = cartPricing(input.lines, input.coupon);
+function buildOrder(input: CheckoutInput, seq: number, placedAt: Date, extras: ItemExtras[] = []): Order {
+  const pricing = cartPricing(input.lines, input.coupon, input.bookletCoupons?.length ?? 0);
+  const redeemed = (input.bookletCoupons ?? []).slice(0, pricing.couponsUsed);
   const order: Order = {
     id: `ORD-${seq}`,
     createdAt: placedAt.toISOString(),
@@ -450,7 +423,7 @@ function buildOrder(input: CheckoutInput, seq: number, placedAt: Date): Order {
     customer: { ...input.customer },
     address: { ...input.address },
     payment: input.payment,
-    items: input.lines.map((l, i) => buildItem(l, i, seq, placedAt)),
+    items: input.lines.map((l, i) => buildItem(l, i, seq, placedAt, extras[i])),
     pricing: {
       subtotal: pricing.subtotal,
       saving: pricing.saving,
@@ -459,6 +432,7 @@ function buildOrder(input: CheckoutInput, seq: number, placedAt: Date): Order {
       ...(pricing.appliedCoupon
         ? { couponCode: pricing.appliedCoupon.code, couponDiscount: pricing.couponDiscount }
         : {}),
+      ...(redeemed.length ? { bookletCoupons: redeemed, bookletDiscount: pricing.bookletDiscount } : {}),
     },
     coinsEarned: pricing.coins,
   };
@@ -486,27 +460,6 @@ const FIRST_ORDER_SEQ = 10001;
  * what mixed tracking looks like. Set to false to start with an empty history.
  */
 const SEED_DEMO_ORDER = true;
-
-const hasStorage = () => typeof window !== "undefined" && !!window.localStorage;
-
-function read<T>(key: string): T | null {
-  if (!hasStorage()) return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function write(key: string, value: unknown) {
-  if (!hasStorage()) return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage full or blocked (private mode) — the order still exists in memory.
-  }
-}
 
 function nextSeq() {
   const seq = read<number>(SEQ_KEY) ?? FIRST_ORDER_SEQ;
@@ -557,11 +510,35 @@ export const ordersApi = {
     return this.list(now).find((o) => o.id === id);
   },
 
-  /** Creates ONE order for the whole mixed cart. */
+  /**
+   * Creates ONE order for the whole mixed cart. Also redeems the e-coupons paying
+   * for gallons and issues any booklets bought. Throws a BookletError (with a
+   * customer-facing message) if a chosen e-coupon can no longer be used.
+   */
   create(input: CheckoutInput): Order {
     if (input.lines.length === 0) throw new Error("Cannot place an order with an empty cart.");
-    const order = buildOrder(input, nextSeq(), new Date());
+    const now = new Date();
+    // Only as many coupons as there are one-time gallons are ever redeemed.
+    const codes = (input.bookletCoupons ?? []).slice(0, couponEligibleUnits(input.lines));
+    bookletsApi.assertRedeemable(codes, now);
+
+    const seq = nextSeq();
+    const orderId = `ORD-${seq}`;
+    const extras: ItemExtras[] = input.lines.map((l) => {
+      if (isDigital(l)) {
+        const bookletIds = bookletsApi.issue(
+          { productId: l.product.id, qty: l.qty, orderId, holder: input.customer.name, pricePaid: lineUnitPrice(l) },
+          now,
+        );
+        return { bookletIds };
+      }
+      if (l.product.id === GALLON_ID && !l.planId && codes.length) return { paidWithCoupons: codes };
+      return {};
+    });
+
+    const order = buildOrder({ ...input, bookletCoupons: codes }, seq, now, extras);
     write(ORDERS_KEY, [order, ...loadAll()]);
+    bookletsApi.redeem(codes, order.id, now);
     write(PROFILE_KEY, { customer: input.customer, address: input.address });
     return order;
   },

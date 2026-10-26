@@ -1,22 +1,8 @@
-import {
-  Award,
-  BadgeCheck,
-  ChevronLeft,
-  ChevronRight,
-  Droplets,
-  FlaskConical,
-  HeartHandshake,
-  Landmark,
-  MessageCircle,
-  Repeat,
-  ShieldCheck,
-  Truck,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Droplets, HeartHandshake, MessageCircle, Repeat, ShieldCheck, Truck } from "lucide-react";
 import aboutVideo from "@/assets/side-video-1.mp4";
 import aboutPoster from "@/assets/video/video-1-poster.jpg";
 import logo from "@/assets/logo-2.png";
 import { APP_VERSION, products } from "@/lib/abraaj-data";
-import { CyclingImage } from "@/components/abraaj/ProductImages";
 
 const range = [
   { category: "Bottles", title: "Bottles", text: "200 ml to 1.5 L, for desks, cars and dinner tables." },
@@ -31,38 +17,6 @@ const journey = [
   { Icon: Truck, title: "Delivered same day", text: "Our own fleet drops it at your door across Dubai." },
   { Icon: Repeat, title: "Refilled on schedule", text: "Subscriptions keep you stocked — skip or pause any time." },
 ];
-
-/**
- * Certifications shown in the "Certified quality" section.
- * EDIT THIS LIST: keep only the certificates Abraaj actually holds, and fix the names /
- * issuing bodies to match the real certificates. Each entry becomes one card.
- */
-const certifications = [
-  {
-    Icon: ShieldCheck,
-    name: "ISO 22000",
-    body: "Food safety management",
-    text: "Controls at every step from source to sealed bottle.",
-  },
-  {
-    Icon: Award,
-    name: "ISO 9001",
-    body: "Quality management",
-    text: "Consistent quality, checked and improved continuously.",
-  },
-  {
-    Icon: FlaskConical,
-    name: "HACCP",
-    body: "Hazard analysis",
-    text: "Critical points monitored through filling and packing.",
-  },
-  {
-    Icon: Landmark,
-    name: "Dubai Municipality",
-    body: "Approved supplier",
-    text: "Meets local drinking-water regulations.",
-  },
-] as const;
 
 export function AboutScreen({
   onBack,
@@ -134,29 +88,6 @@ export function AboutScreen({
         </ol>
       </div>
 
-      {/* Certifications — edit the `certifications` list above to match your real certificates. */}
-      <div className="mt-7">
-        <div className="flex items-center gap-2">
-          <BadgeCheck className="h-5 w-5 shrink-0 text-aqua" />
-          <h2 className="text-f-base font-bold text-foreground">Certified quality</h2>
-        </div>
-        <p className="mt-1 text-f-xs text-muted-foreground">
-          Our water, plant and deliveries follow recognised food-safety and quality standards.
-        </p>
-        <ul className="mt-3 grid grid-cols-2 gap-2.5 xs:gap-3">
-          {certifications.map(({ Icon, name, body, text }) => (
-            <li key={name} className="card-soft flex min-w-0 flex-col items-center rounded-2xl p-3.5 text-center">
-              <div className="bg-aqua-soft grid h-12 w-12 shrink-0 place-items-center rounded-full text-brand ring-2 ring-brand/15 ring-offset-2 ring-offset-background">
-                <Icon className="h-5 w-5" />
-              </div>
-              <p className="mt-2.5 text-f-sm font-extrabold text-foreground">{name}</p>
-              <p className="text-f-2xs font-semibold text-aqua">{body}</p>
-              <p className="mt-1 text-f-2xs text-muted-foreground">{text}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
-
       <div className="mt-7 flex items-center justify-between gap-2">
         <h2 className="text-f-base font-bold text-foreground">What we deliver</h2>
         <button onClick={onShop} className="shrink-0 text-f-xs font-semibold text-brand">
@@ -165,11 +96,11 @@ export function AboutScreen({
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2.5 xs:gap-3">
         {range.map((r) => {
-          const prod = products.find((p) => p.category === r.category);
+          const img = products.find((p) => p.category === r.category)?.image;
           return (
             <div key={r.title} className="card-soft flex min-w-0 flex-col rounded-2xl p-3">
               <div className="flex h-20 items-center justify-center overflow-hidden">
-                {prod && <CyclingImage product={prod} className="h-full w-full" />}
+                {img && <img src={img} alt="" className="h-full w-auto max-w-full object-contain" />}
               </div>
               <p className="mt-2 text-f-sm font-bold text-foreground">{r.title}</p>
               <p className="text-f-2xs text-muted-foreground">{r.text}</p>

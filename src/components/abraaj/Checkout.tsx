@@ -4,7 +4,9 @@ import { durationById, plans } from "@/lib/abraaj-data";
 import {
   ONE_TIME_DELIVERY_DAYS,
   cartPricing,
+  couponEligibleUnits,
   formatPrice,
+  isDigital,
   isSubscription,
   lineKey,
   lineTotal,
@@ -22,6 +24,9 @@ import {
   type PaymentMethod,
 } from "@/lib/orders";
 import type { Coupon } from "@/lib/coupons";
+import { BookletError } from "@/lib/booklets";
+import { GALLON_ID } from "@/lib/abraaj-data";
+import { addMonths } from "@/lib/dates";
 import { BackLink, InfoRow, ProductThumb, SectionTitle, SumRow } from "@/components/abraaj/order-ui";
 
 /* ------------------------------------------------------------------ */
@@ -36,7 +41,8 @@ const FIELD_ORDER: FieldId[] = ["name", "phone", "email", "line", "city", "state
 /** 5 digits (UAE-style "00000") or 6 digits (PIN code). */
 const PINCODE_PATTERN = /^\d{5,6}$/;
 
-function validate(f: Form): Partial<Record<FieldId, string>> {
+/** Contact and address fields; booklet-only orders skip the address (nothing is delivered). */
+function validate(f: Form, needsAddress = true): Partial<Record<FieldId, string>> {
   const e: Partial<Record<FieldId, string>> = {};
   const phoneDigits = f.phone.replace(/\D/g, "");
 
@@ -50,6 +56,7 @@ function validate(f: Form): Partial<Record<FieldId, string>> {
   if (!f.email.trim()) e.email = "Enter your email for the order receipt.";
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) e.email = "Enter a valid email, e.g. name@example.com.";
 
+  if (!needsAddress) return e;
   if (f.line.trim().length < 8) e.line = "Add the building, street and area.";
   if (f.city.trim().length < 2) e.city = "Enter your city.";
   if (f.state.trim().length < 2) e.state = "Enter your state.";
@@ -131,8 +138,10 @@ function Field({
 /* Per-item summary (spec format)                                       */
 /* ------------------------------------------------------------------ */
 
-function SummaryItem({ line, now }: { line: CartLine; now: Date }) {
+function SummaryItem({ line, now, couponsUsed = 0 }: { line: CartLine; now: Date; couponsUsed?: number }) {
   const sub = isSubscription(line);
+  const digital = isDigital(line);
+  const spec = line.product.booklet;
   const unit = lineUnitPrice(line);
   const plan = plans.find((p) => p.id === line.planId);
   const dates = sub ? subscriptionDates(line, now) : null;
@@ -152,6 +161,16 @@ function SummaryItem({ line, now }: { line: CartLine; now: Date }) {
       </div>
 
       <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-f-xs">
+        {digital && spec ? (
+          <>
+            <InfoRow label="Purchase" value="Digital booklet" />
+            <InfoRow label="Quantity" value={line.qty} />
+            <InfoRow label="Coupons" value={`${spec.coupons * line.qty} × 5 Gallon`} />
+            <InfoRow label="Valid until" value={formatDate(addMonths(now, spec.validityMonths))} />
+            <InfoRow label="Delivery" value="Issued instantly to your account" />
+          </>
+        ) : (
+          <>
         <InfoRow label="Purchase" value={sub ? "Subscription" : "One-time"} />
         {sub && dates && <InfoRow label="Plan" value={`${durationById(line.durationId).label}, ${plan?.name.toLowerCase()}`} />}
         <InfoRow label="Quantity" value={line.qty} />
@@ -171,6 +190,9 @@ function SummaryItem({ line, now }: { line: CartLine; now: Date }) {
             <InfoRow label="Expected delivery" value={dayAndDate(expected, now)} />
           </>
         )}
+        {couponsUsed > 0 && <InfoRow label="Paid with e-coupons" value={`${couponsUsed} of ${line.qty}`} strong />}
+          </>
+        )}
       </dl>
     </li>
   );
@@ -186,6 +208,8 @@ export function CheckoutScreen({
   onShop,
   onPlaced,
   coupon,
+  bookletCoupons = [],
+  onRedeemFailed,
 }: {
   lines: CartLine[];
   onBack: () => void;
@@ -193,6 +217,10 @@ export function CheckoutScreen({
   /** Called with the single order created for the whole cart. */
   onPlaced: (order: Order) => void;
   coupon?: Coupon | null | undefined;
+  /** Booklet e-coupon codes paying for one-time 5 Gallon bottles. */
+  bookletCoupons?: string[];
+  /** A picked e-coupon was used elsewhere in the meantime: refresh booklets. */
+  onRedeemFailed?: () => void;
 }) {
   const [form, setForm] = useState<Form>({
     name: "Ahmed H.",
@@ -217,12 +245,14 @@ export function CheckoutScreen({
     if (p) setForm({ ...p.customer, ...p.address });
   }, []);
 
-  const errors = validate(form);
+  const needsAddress = lines.some((l) => !isDigital(l));
+  const errors = validate(form, needsAddress);
   const shown = (id: FieldId) => (tried || touched[id] ? errors[id] : undefined);
   const set = (id: FieldId) => (v: string) => setForm((f) => ({ ...f, [id]: v }));
   const blur = (id: FieldId) => () => setTouched((t) => ({ ...t, [id]: true }));
 
-  const pricing = cartPricing(lines, coupon);
+  const usable = bookletCoupons.slice(0, couponEligibleUnits(lines));
+  const pricing = cartPricing(lines, coupon, usable.length);
   const hasSub = lines.some(isSubscription);
   const hasOnce = lines.some((l) => !isSubscription(l));
 
@@ -270,10 +300,16 @@ export function CheckoutScreen({
         },
         payment,
         coupon,
+        bookletCoupons: usable,
       });
       onPlaced(order);
-    } catch {
-      setSubmitError("The order couldn't be placed. Check your connection and try again.");
+    } catch (err) {
+      if (err instanceof BookletError) {
+        setSubmitError(`${err.message} Your cart has been updated.`);
+        onRedeemFailed?.();
+      } else {
+        setSubmitError("The order couldn't be placed. Check your connection and try again.");
+      }
       setPlacing(false);
     }
   }
@@ -285,11 +321,13 @@ export function CheckoutScreen({
       <BackLink label="Cart" onClick={onBack} />
       <h1 className="mt-2 text-f-xl font-extrabold tracking-tight text-foreground">Checkout</h1>
       <p className="mt-1 text-f-xs text-muted-foreground">
-        {hasOnce && hasSub
-          ? "One order for everything in your cart. One-time items and subscriptions are tracked separately."
-          : hasSub
-            ? "Your subscriptions start today and are placed as one order."
-            : "Everything arrives within 1 day."}
+        {!needsAddress
+          ? "Your booklet is issued to your account as soon as the order is placed."
+          : hasOnce && hasSub
+            ? "One order for everything in your cart. One-time items and subscriptions are tracked separately."
+            : hasSub
+              ? "Your subscriptions start today and are placed as one order."
+              : "Everything arrives within 1 day."}
       </p>
 
       <div className="mt-5 grid gap-6 @3xl:grid-cols-[minmax(0,1fr)_22rem] @3xl:items-start">
@@ -328,6 +366,7 @@ export function CheckoutScreen({
             </div>
           </fieldset>
 
+          {needsAddress && (
           <fieldset className="space-y-3">
             <legend className="mb-2">
               <SectionTitle Icon={MapPin}>Delivery address</SectionTitle>
@@ -360,13 +399,14 @@ export function CheckoutScreen({
               </div>
             </div>
           </fieldset>
+          )}
 
           <fieldset>
             <legend className="mb-2">
               <SectionTitle Icon={CreditCard}>Payment</SectionTitle>
             </legend>
             <div className="grid gap-2 @xl:grid-cols-3" role="radiogroup" aria-label="Payment method">
-              {payments.map(({ id, label, sub, Icon }) => (
+              {payments.filter((p) => needsAddress || p.id !== "cash").map(({ id, label, sub, Icon }) => (
                 <button
                   key={id}
                   type="button"
@@ -405,13 +445,25 @@ export function CheckoutScreen({
           </div>
           <ul className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-2.5">
             {lines.map((l) => (
-              <SummaryItem key={lineKey(l)} line={l} now={now} />
+              <SummaryItem
+                key={lineKey(l)}
+                line={l}
+                now={now}
+                couponsUsed={l.product.id === GALLON_ID && !isSubscription(l) ? pricing.couponsUsed : 0}
+              />
             ))}
           </ul>
 
           <div className="card-soft mt-4 space-y-2 rounded-2xl p-4 text-f-sm">
             <SumRow label="Subtotal" value={formatPrice(pricing.subtotal)} />
             {pricing.saving > 0 && <SumRow label="Subscription saving" value={`− ${formatPrice(pricing.saving)}`} accent />}
+            {pricing.bookletDiscount > 0 && (
+              <SumRow
+                label={`E-coupons (${pricing.couponsUsed} × 5 Gallon)`}
+                value={`− ${formatPrice(pricing.bookletDiscount)}`}
+                accent
+              />
+            )}
             {pricing.couponDiscount > 0 && pricing.appliedCoupon && (
               <SumRow label={`Coupon ${pricing.appliedCoupon.code}`} value={`− ${formatPrice(pricing.couponDiscount)}`} accent />
             )}

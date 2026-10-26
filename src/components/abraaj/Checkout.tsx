@@ -25,6 +25,8 @@ import {
 } from "@/lib/orders";
 import type { Coupon } from "@/lib/coupons";
 import { BookletError } from "@/lib/booklets";
+import { ScheduleError, scheduleLabel } from "@/lib/schedule";
+import { DateChips } from "@/components/abraaj/Schedule";
 import { GALLON_ID } from "@/lib/abraaj-data";
 import { addMonths } from "@/lib/dates";
 import { BackLink, InfoRow, ProductThumb, SectionTitle, SumRow } from "@/components/abraaj/order-ui";
@@ -180,9 +182,14 @@ function SummaryItem({ line, now, couponsUsed = 0 }: { line: CartLine; now: Date
         />
         {sub && dates ? (
           <>
+            <InfoRow label="Delivery days" value={scheduleLabel(line.planId!, dates.days)} strong />
             <InfoRow label="Start" value={formatDate(dates.start)} />
             <InfoRow label="End" value={formatDate(dates.end)} />
-            <InfoRow label="First delivery" value={`${relativeDay(dates.firstDelivery, now)}, then ${plan?.every.toLowerCase()}`} />
+            <InfoRow label="First delivery" value={dayAndDate(dates.firstDelivery, now)} />
+            <InfoRow label="Deliveries" value={`${dates.dates.length} in total`} />
+            <div className="pt-1">
+              <DateChips dates={dates.dates.slice(0, 4)} now={now} more={Math.max(0, dates.dates.length - 4)} />
+            </div>
           </>
         ) : (
           <>
@@ -304,7 +311,9 @@ export function CheckoutScreen({
       });
       onPlaced(order);
     } catch (err) {
-      if (err instanceof BookletError) {
+      if (err instanceof ScheduleError) {
+        setSubmitError(`${err.message} Update the subscription in your cart.`);
+      } else if (err instanceof BookletError) {
         setSubmitError(`${err.message} Your cart has been updated.`);
         onRedeemFailed?.();
       } else {

@@ -14,6 +14,7 @@ import {
   itemStatusLabel,
   purchaseLabel,
   relativeDay,
+  upcomingDeliveries,
   type ItemSubscription,
   type Order,
   type OrderItem,
@@ -29,6 +30,8 @@ import {
   Timeline,
   type TimelineStep,
 } from "@/components/abraaj/order-ui";
+import { DateChips } from "@/components/abraaj/Schedule";
+import { dateKey, scheduleLabel } from "@/lib/schedule";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                              */
@@ -55,8 +58,41 @@ function itemCount(order: Order) {
 /** "1 year subscription, weekly" / "One-time" */
 function purchaseLine(item: OrderItem) {
   return item.subscription
-    ? `${purchaseLabel(item)}, ${item.subscription.frequency.toLowerCase()}`
+    ? `${purchaseLabel(item)} · ${scheduleLabel(item.subscription.planId, item.subscription.days, "short")}`
     : purchaseLabel(item);
+}
+
+/** Delivery days + the next few dates + any pause, for subscription items. */
+function ScheduleBlock({ sub, onManage }: { sub: ItemSubscription; onManage?: (() => void) | undefined }) {
+  const now = new Date();
+  const next = upcomingDeliveries(sub, now);
+  const today = dateKey(now);
+  const pause = sub.pauses.find((p) => p.to === null || p.to >= today);
+  const ended = sub.status === "CANCELLED" || sub.status === "COMPLETED";
+  return (
+    <div className="bg-aqua-soft mt-3 rounded-xl px-3 py-2.5">
+      <p className="text-f-2xs text-muted-foreground">Delivery days</p>
+      <p className="text-f-sm font-extrabold text-brand">{scheduleLabel(sub.planId, sub.days)}</p>
+      {pause && !ended && (
+        <p className="mt-1 text-f-2xs font-semibold text-brand">
+          {pause.to ? `Paused ${formatDate(pause.from)} – ${formatDate(pause.to)}` : `Paused from ${formatDate(pause.from)}`}
+        </p>
+      )}
+      {!ended && (
+        <div className="mt-2">
+          <DateChips dates={next.slice(0, 4)} now={now} more={Math.max(0, next.length - 4)} />
+        </div>
+      )}
+      {onManage && !ended && (
+        <button
+          onClick={onManage}
+          className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-brand px-3.5 py-1.5 text-f-2xs font-bold text-primary-foreground focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          <Repeat className="h-3.5 w-3.5" /> Change days, pause or cancel
+        </button>
+      )}
+    </div>
+  );
 }
 
 function durationText(sub: ItemSubscription) {
@@ -200,7 +236,15 @@ function BookletLinks({ item, onOpenBooklet }: { item: OrderItem; onOpenBooklet?
   );
 }
 
-function DetailItem({ item, onOpenBooklet }: { item: OrderItem; onOpenBooklet?: ((id: string) => void) | undefined }) {
+function DetailItem({
+  item,
+  onOpenBooklet,
+  onManage,
+}: {
+  item: OrderItem;
+  onOpenBooklet?: ((id: string) => void) | undefined;
+  onManage?: (() => void) | undefined;
+}) {
   const sub = item.subscription;
   const del = item.delivery;
   return (
@@ -257,13 +301,16 @@ function DetailItem({ item, onOpenBooklet }: { item: OrderItem; onOpenBooklet?: 
         {sub && (
           <>
             <InfoRow label="Plan" value={`${durationText(sub)}, ${sub.frequency.toLowerCase()}`} />
+            <InfoRow label="Delivery days" value={scheduleLabel(sub.planId, sub.days)} strong />
             <InfoRow label="Start date" value={formatDate(sub.startDate)} />
             <InfoRow label="End date" value={formatDate(sub.endDate)} />
+            <InfoRow label="Deliveries" value={`${sub.deliveriesCompleted} of ${sub.totalDeliveries} made`} />
             <InfoRow label="Status" value={SUBSCRIPTION_STATUS_LABEL[sub.status]} />
           </>
         )}
         <InfoRow label="Tracking no." value={<span className="font-mono tracking-tight">{item.trackingNumber}</span>} />
       </dl>
+      {sub && <ScheduleBlock sub={sub} onManage={onManage} />}
       <BookletLinks item={item} onOpenBooklet={onOpenBooklet} />
     </li>
   );
@@ -275,6 +322,7 @@ export function OrderDetailsScreen({
   onBack,
   onTrack,
   onOpenBooklet,
+  onManageSubscription,
 }: {
   order: Order;
   justPlaced?: boolean;
@@ -282,6 +330,8 @@ export function OrderDetailsScreen({
   onTrack: () => void;
   /** Opens a booklet bought in this order. */
   onOpenBooklet?: (id: string) => void;
+  /** Opens "My subscriptions" at this order item. */
+  onManageSubscription?: (itemId: string) => void;
 }) {
   const { customer, address } = order;
   const digitalOnly = order.items.every((i) => i.digital);
@@ -346,7 +396,12 @@ export function OrderDetailsScreen({
         <SectionTitle Icon={Package}>Products</SectionTitle>
         <ul className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-2.5 @2xl:grid-cols-2">
           {order.items.map((item) => (
-            <DetailItem key={item.id} item={item} onOpenBooklet={onOpenBooklet} />
+            <DetailItem
+              key={item.id}
+              item={item}
+              onOpenBooklet={onOpenBooklet}
+              onManage={onManageSubscription ? () => onManageSubscription(item.id) : undefined}
+            />
           ))}
         </ul>
       </div>
@@ -422,8 +477,13 @@ function subscriptionSteps(sub: ItemSubscription): TimelineStep[] {
     }
     if (s === "RENEWED" && !at) detail = `Renews ${sub.frequency.toLowerCase()} after each delivery`;
     if (s === "COMPLETED") {
-      label = at ? "Completed" : "Completed / expires";
-      detail = at ? `Ended ${formatDate(sub.endDate)}` : `On ${formatDate(sub.endDate)}`;
+      if (sub.cancelledAt) {
+        label = "Cancelled";
+        detail = `On ${formatDate(sub.cancelledAt)}`;
+      } else {
+        label = at ? "Completed" : "Completed / expires";
+        detail = at ? `Ended ${formatDate(sub.endDate)}` : `On ${formatDate(sub.endDate)}`;
+      }
     }
     return { key: s, label, detail, state };
   });
@@ -438,7 +498,15 @@ function Fact({ label, value, wide }: { label: string; value: string; wide?: boo
   );
 }
 
-function TrackItem({ item, onOpenBooklet }: { item: OrderItem; onOpenBooklet?: ((id: string) => void) | undefined }) {
+function TrackItem({
+  item,
+  onOpenBooklet,
+  onManage,
+}: {
+  item: OrderItem;
+  onOpenBooklet?: ((id: string) => void) | undefined;
+  onManage?: (() => void) | undefined;
+}) {
   const del = item.delivery;
   const sub = item.subscription;
   return (
@@ -515,6 +583,7 @@ function TrackItem({ item, onOpenBooklet }: { item: OrderItem; onOpenBooklet?: (
               wide
             />
           </dl>
+          <ScheduleBlock sub={sub} onManage={onManage} />
           <div className="mt-4">
             <Timeline steps={subscriptionSteps(sub)} label={`Subscription progress for ${item.product.name}`} />
           </div>
@@ -533,11 +602,13 @@ export function TrackOrderScreen({
   onBack,
   onView,
   onOpenBooklet,
+  onManageSubscription,
 }: {
   order: Order;
   onBack: () => void;
   onView: () => void;
   onOpenBooklet?: (id: string) => void;
+  onManageSubscription?: (itemId: string) => void;
 }) {
   return (
     <section className="animate-rise @container">
@@ -552,7 +623,12 @@ export function TrackOrderScreen({
 
       <ul className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3 @3xl:grid-cols-2 @3xl:items-start">
         {order.items.map((item) => (
-          <TrackItem key={item.id} item={item} onOpenBooklet={onOpenBooklet} />
+          <TrackItem
+            key={item.id}
+            item={item}
+            onOpenBooklet={onOpenBooklet}
+            onManage={onManageSubscription ? () => onManageSubscription(item.id) : undefined}
+          />
         ))}
       </ul>
 

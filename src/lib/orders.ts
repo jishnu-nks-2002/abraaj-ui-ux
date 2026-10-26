@@ -9,6 +9,28 @@ import {
 } from "@/lib/cart";
 import { GALLON_ID } from "@/lib/abraaj-data";
 import { bookletsApi } from "@/lib/booklets";
+import {
+  LEAD_DAYS,
+  MAX_PAUSE_DAYS,
+  PLAN_RULES,
+  ScheduleError,
+  dateKey,
+  defaultDays,
+  firstEligibleDay,
+  generateDates,
+  isPausedOn,
+  mondayOf,
+  parseDateKey,
+  planRule,
+  planSchedule,
+  scheduleLabel,
+  validateDays,
+  validateNewSubscription,
+  validateStartDate,
+  weekdayOf,
+  type Pause,
+  type Weekday,
+} from "@/lib/schedule";
 import type { Coupon } from "@/lib/coupons";
 import { HOUR, MIN, addDays, addMonths, atHour, startOfDay } from "@/lib/dates";
 import { hasStorage, read, write } from "@/lib/storage";
@@ -34,7 +56,13 @@ export type DeliveryStatus =
 /** Timeline stages a subscription moves through. */
 export type SubscriptionStage = "STARTED" | "ACTIVE" | "NEXT_DELIVERY" | "RENEWED" | "COMPLETED";
 /** The subscription's current status. */
-export type SubscriptionStatus = "STARTED" | "ACTIVE" | "COMPLETED";
+export type SubscriptionStatus = "STARTED" | "ACTIVE" | "PAUSED" | "CANCELLED" | "COMPLETED";
+
+export type SubscriptionChange = {
+  at: string;
+  kind: "CREATED" | "DAYS" | "START_DATE" | "PAUSE" | "RESUME" | "CANCEL" | "MIGRATED";
+  note: string;
+};
 
 export type OrderStatus =
   | "PLACED"
@@ -70,6 +98,18 @@ export type ItemSubscription = {
   totalDeliveries: number;
   deliveriesCompleted: number;
   statusHistory: HistoryEntry<SubscriptionStage>[];
+  /** Delivery weekdays chosen by the customer, Monday-first. */
+  days: Weekday[];
+  /** Weeks between delivery weeks (1 weekly, 2 bi-weekly, 4 monthly). */
+  everyWeeks: number;
+  /** Monday ("2026-10-26") the cadence counts from, so "every other week" keeps its rhythm. */
+  anchorDate: string;
+  /** Every planned delivery day ("2026-10-27"), past and future. Rebuilt on each change. */
+  schedule: string[];
+  pauses: Pause[];
+  cancelledAt: string | null;
+  /** Audit trail of schedule changes. */
+  changes: SubscriptionChange[];
 };
 
 export type OrderItem = {
@@ -158,6 +198,8 @@ export const SUBSCRIPTION_STAGE_LABEL: Record<SubscriptionStage, string> = {
 export const SUBSCRIPTION_STATUS_LABEL: Record<SubscriptionStatus, string> = {
   STARTED: "Starting",
   ACTIVE: "Active",
+  PAUSED: "Paused",
+  CANCELLED: "Cancelled",
   COMPLETED: "Completed",
 };
 
@@ -227,11 +269,16 @@ function oneTimeSchedule(placedAt: Date, expected: Date): Record<DeliveryStatus,
   };
 }
 
-function subscriptionDeliveryDates(sub: Pick<ItemSubscription, "firstDeliveryDate" | "endDate" | "intervalDays">) {
-  const dates: Date[] = [];
-  const end = new Date(sub.endDate);
-  for (let d = new Date(sub.firstDeliveryDate); d < end; d = addDays(d, sub.intervalDays)) dates.push(d);
-  return dates;
+/** The persisted delivery days of a subscription, as dates. */
+export function subscriptionDeliveryDates(sub: Pick<ItemSubscription, "schedule">) {
+  return sub.schedule.map((k) => parseDateKey(k)).filter((d): d is Date => d !== null);
+}
+
+/** Planned deliveries still to come (not yet delivered at `now`). */
+export function upcomingDeliveries(sub: Pick<ItemSubscription, "schedule">, now = new Date(), limit = Infinity) {
+  return subscriptionDeliveryDates(sub)
+    .filter((d) => atHour(d, DELIVERED_BY_HOUR) > now)
+    .slice(0, limit);
 }
 
 function subscriptionSchedule(placedAt: Date, sub: ItemSubscription): Record<SubscriptionStage, Date | undefined> {
@@ -243,7 +290,8 @@ function subscriptionSchedule(placedAt: Date, sub: ItemSubscription): Record<Sub
     NEXT_DELIVERY: dates[0] ? atHour(dates[0], DELIVERED_BY_HOUR) : undefined,
     // The cycle renews with each delivery after the first.
     RENEWED: dates[1] ? atHour(dates[1], DELIVERED_BY_HOUR) : undefined,
-    COMPLETED: new Date(sub.endDate),
+    // A cancelled subscription ends when it's cancelled.
+    COMPLETED: sub.cancelledAt ? new Date(sub.cancelledAt) : new Date(sub.endDate),
   };
 }
 
@@ -265,17 +313,24 @@ function syncItem(item: OrderItem, placedAt: Date, now: Date): OrderItem {
     const dates = subscriptionDeliveryDates(sub);
     const delivered = dates.filter((d) => atHour(d, DELIVERED_BY_HOUR) <= now);
     const next = dates.find((d) => atHour(d, DELIVERED_BY_HOUR) > now);
+    const ended = sub.cancelledAt ? "CANCELLED" : "COMPLETED";
     const status: SubscriptionStatus = reached.includes("COMPLETED")
-      ? "COMPLETED"
-      : reached.includes("ACTIVE")
-        ? "ACTIVE"
-        : "STARTED";
+      ? ended
+      : sub.cancelledAt
+        ? "CANCELLED"
+        : isPausedOn(now, sub.pauses)
+          ? "PAUSED"
+          : reached.includes("ACTIVE")
+            ? "ACTIVE"
+            : "STARTED";
+    const finished = status === "COMPLETED" || status === "CANCELLED";
     return {
       ...item,
       subscription: {
         ...sub,
         status,
-        nextDeliveryDate: status === "COMPLETED" || !next ? null : next.toISOString(),
+        firstDeliveryDate: dates[0]?.toISOString() ?? sub.firstDeliveryDate,
+        nextDeliveryDate: finished || !next ? null : next.toISOString(),
         totalDeliveries: dates.length,
         deliveriesCompleted: delivered.length,
         statusHistory: reached.map((s) => ({ status: s, at: sched[s]!.toISOString() })),
@@ -300,7 +355,7 @@ export function deriveOrderStatus(items: OrderItem[]): OrderStatus {
 
   if (nothingMoved) return "PLACED";
   if (!allDelivered) return anyDelivered ? "PARTIALLY_DELIVERED" : "IN_PROGRESS";
-  if (subs.some((i) => i.subscription!.status !== "COMPLETED")) return "ACTIVE";
+  if (subs.some((i) => i.subscription!.status !== "COMPLETED" && i.subscription!.status !== "CANCELLED")) return "ACTIVE";
   return subs.length ? "COMPLETED" : "DELIVERED";
 }
 
@@ -329,18 +384,28 @@ export function oneTimeExpectedDate(placedAt = new Date()) {
   return startOfDay(addDays(placedAt, ONE_TIME_DELIVERY_DAYS));
 }
 
-/** Start / end / first-delivery dates for a subscription line placed at `placedAt`. */
-export function subscriptionDates(line: Pick<CartLine, "planId" | "durationId">, placedAt = new Date()) {
-  const duration = durationById(line.durationId);
-  const start = startOfDay(placedAt);
-  const months = duration.unit === "YEAR" ? duration.value * 12 : duration.value;
+/**
+ * Start / end dates and the full delivery schedule for a subscription line
+ * placed at `placedAt`: deliveries fall on the chosen weekdays, from the first
+ * eligible day (at least LEAD_DAYS after ordering) until the end date.
+ */
+export function subscriptionDates(
+  line: Pick<CartLine, "planId" | "durationId" | "days" | "startDate">,
+  placedAt = new Date(),
+) {
+  const start = parseDateKey(line.startDate) ?? startOfDay(placedAt);
+  const days = line.days?.length ? line.days : defaultDays(start, placedAt);
+  const plan = planSchedule({ planId: line.planId ?? "weekly", durationId: line.durationId, days, startDate: line.startDate }, placedAt);
   return {
-    start,
-    end: addMonths(start, months),
-    // First drop-off follows the same "within 1 day" promise as one-time items.
-    firstDelivery: addDays(start, ONE_TIME_DELIVERY_DAYS),
-    intervalDays: PLAN_INTERVAL_DAYS[line.planId ?? ""] ?? 30,
-    duration,
+    start: plan.start,
+    end: plan.end,
+    firstDelivery: plan.firstDelivery ?? firstEligibleDay(plan.start, placedAt),
+    intervalDays: plan.everyWeeks * 7,
+    everyWeeks: plan.everyWeeks,
+    anchor: plan.anchor,
+    days: plan.days,
+    dates: plan.dates,
+    duration: plan.duration,
   };
 }
 
@@ -406,9 +471,16 @@ function buildItem(line: CartLine, index: number, orderSeq: number, placedAt: Da
       status: "STARTED",
       firstDeliveryDate: d.firstDelivery.toISOString(),
       nextDeliveryDate: d.firstDelivery.toISOString(),
-      totalDeliveries: 0,
+      totalDeliveries: d.dates.length,
       deliveriesCompleted: 0,
       statusHistory: [{ status: "STARTED", at: placedAt.toISOString() }],
+      days: d.days,
+      everyWeeks: d.everyWeeks,
+      anchorDate: d.anchor,
+      schedule: d.dates.map(dateKey),
+      pauses: [],
+      cancelledAt: null,
+      changes: [{ at: placedAt.toISOString(), kind: "CREATED", note: scheduleLabel(line.planId, d.days) }],
     },
   };
 }
@@ -495,7 +567,46 @@ function loadAll(): Order[] {
     orders = SEED_DEMO_ORDER && hasStorage() ? [demoOrder()] : [];
     write(ORDERS_KEY, orders);
   }
+  // One-off upgrade of subscriptions saved before fixed-weekday scheduling.
+  if (orders.some((o) => o.items.some((i) => i.subscription && !Array.isArray(i.subscription.schedule)))) {
+    orders = orders.map((o) => ({ ...o, items: o.items.map((i) => migrateItem(i)) }));
+    write(ORDERS_KEY, orders);
+  }
   return orders;
+}
+
+/**
+ * Subscriptions saved before weekday scheduling had only a first delivery date
+ * and a day interval. They keep every delivery already made, and from then on
+ * deliver on the weekday of their first delivery, on the plan's weekly cadence.
+ */
+function migrateItem(item: OrderItem, now = new Date()): OrderItem {
+  const sub = item.subscription as (Partial<ItemSubscription> & ItemSubscription) | null;
+  if (!sub || Array.isArray(sub.schedule)) return item;
+  const first = new Date(sub.firstDeliveryDate);
+  const end = new Date(sub.endDate);
+  const past: string[] = [];
+  for (let d = startOfDay(first); d < end && atHour(d, DELIVERED_BY_HOUR) <= now; d = addDays(d, sub.intervalDays || 30)) past.push(dateKey(d));
+  const rule = planRule(sub.planId) ?? PLAN_RULES["weekly"]!;
+  const days = [weekdayOf(first)];
+  const anchor = dateKey(mondayOf(first));
+  const lastPast = past.length ? parseDateKey(past[past.length - 1]) : null;
+  const from = lastPast ? addDays(lastPast, 1) : startOfDay(first);
+  const future = generateDates({ days, everyWeeks: rule.everyWeeks, anchor, end: sub.endDate }, from).map(dateKey);
+  return {
+    ...item,
+    subscription: {
+      ...sub,
+      days,
+      everyWeeks: rule.everyWeeks,
+      intervalDays: rule.everyWeeks * 7,
+      anchorDate: anchor,
+      schedule: [...past, ...future],
+      pauses: [],
+      cancelledAt: null,
+      changes: [{ at: now.toISOString(), kind: "MIGRATED", note: scheduleLabel(sub.planId, days) }],
+    },
+  };
 }
 
 export const ordersApi = {
@@ -518,6 +629,15 @@ export const ordersApi = {
   create(input: CheckoutInput): Order {
     if (input.lines.length === 0) throw new Error("Cannot place an order with an empty cart.");
     const now = new Date();
+    // Validate every subscription's schedule here, not just in the UI, and store the cleaned days.
+    input = {
+      ...input,
+      lines: input.lines.map((l) => {
+        if (!l.planId) return l;
+        const plan = validateNewSubscription({ planId: l.planId, durationId: l.durationId, days: l.days, startDate: l.startDate }, now);
+        return { ...l, days: plan.days };
+      }),
+    };
     // Only as many coupons as there are one-time gallons are ever redeemed.
     const codes = (input.bookletCoupons ?? []).slice(0, couponEligibleUnits(input.lines));
     bookletsApi.assertRedeemable(codes, now);
@@ -546,5 +666,168 @@ export const ordersApi = {
   /** Contact + address from the last checkout, used to pre-fill the next one. */
   lastProfile(): { customer: Customer; address: Address } | null {
     return read(PROFILE_KEY);
+  },
+};
+
+/* ================================================================== */
+/* Subscriptions service: change days, start date, pause, cancel       */
+/* ================================================================== */
+/*
+ * Every change is validated here (the "backend"), rebuilds the stored schedule
+ * from the change's effective day onwards and keeps deliveries before that day
+ * untouched, so history never moves. Changes take effect from tomorrow
+ * (LEAD_DAYS), the same notice as a new order: today's delivery is already on
+ * the van.
+ */
+
+export type SubscriptionRef = { orderId: string; itemId: string };
+export type SubscriptionEntry = { order: Order; item: OrderItem; sub: ItemSubscription };
+
+/** Whether the start date can still move: nothing delivered and the first delivery is at least a day away. */
+export function canChangeStart(sub: ItemSubscription, now = new Date()) {
+  const first = parseDateKey(sub.schedule[0]);
+  return !sub.cancelledAt && sub.deliveriesCompleted === 0 && (!first || first >= changeEffectiveFrom(now));
+}
+
+/** First day a change can affect. */
+export function changeEffectiveFrom(now = new Date()) {
+  return addDays(startOfDay(now), LEAD_DAYS);
+}
+
+function rebuildSchedule(sub: ItemSubscription, from: Date): string[] {
+  const startDay = startOfDay(new Date(sub.startDate));
+  const begin = from > startDay ? from : startDay;
+  const keep = sub.schedule.filter((k) => k < dateKey(begin));
+  const future = generateDates(
+    {
+      days: sub.days,
+      everyWeeks: sub.everyWeeks,
+      anchor: sub.anchorDate,
+      end: sub.endDate,
+      pauses: sub.pauses,
+      cancelFrom: sub.cancelledAt ? dateKey(changeEffectiveFrom(new Date(sub.cancelledAt))) : null,
+    },
+    begin,
+  ).map(dateKey);
+  return [...keep, ...future];
+}
+
+function assertChangeable(sub: ItemSubscription, now: Date) {
+  if (sub.cancelledAt) throw new ScheduleError("This subscription has been cancelled.");
+  if (now >= new Date(sub.endDate)) throw new ScheduleError("This subscription has ended.");
+}
+
+function log(sub: ItemSubscription, kind: SubscriptionChange["kind"], note: string, now: Date): ItemSubscription {
+  return { ...sub, changes: [...(sub.changes ?? []), { at: now.toISOString(), kind, note }] };
+}
+
+function mutateSubscription(ref: SubscriptionRef, now: Date, change: (sub: ItemSubscription) => ItemSubscription): Order {
+  const orders = loadAll();
+  const oi = orders.findIndex((o) => o.id === ref.orderId);
+  const order = orders[oi];
+  const item = order?.items.find((i) => i.id === ref.itemId);
+  if (!order || !item?.subscription) throw new ScheduleError("Subscription not found.");
+  const next = change(syncItem(item, new Date(order.createdAt), now).subscription!);
+  const updated = syncOrder({ ...order, items: order.items.map((i) => (i.id === item.id ? { ...i, subscription: next } : i)) }, now);
+  orders[oi] = updated;
+  write(ORDERS_KEY, orders);
+  return updated;
+}
+
+export const subscriptionsApi = {
+  /** Every subscription across orders, newest order first. */
+  list(now = new Date()): SubscriptionEntry[] {
+    return ordersApi.list(now).flatMap((order) =>
+      order.items.filter((i) => i.subscription).map((item) => ({ order, item, sub: item.subscription! })),
+    );
+  },
+
+  /** Change the delivery weekdays. Deliveries from tomorrow follow the new days. */
+  changeDays(ref: SubscriptionRef, days: Weekday[], now = new Date()) {
+    return mutateSubscription(ref, now, (sub) => {
+      assertChangeable(sub, now);
+      const clean = validateDays(sub.planId, days);
+      if (clean.join() === sub.days.join()) return sub;
+      const next = { ...sub, days: clean };
+      next.schedule = rebuildSchedule(next, changeEffectiveFrom(now));
+      return log(next, "DAYS", scheduleLabel(sub.planId, clean), now);
+    });
+  },
+
+  /** Move the start date. Only before the first delivery; the end date moves with it. */
+  changeStartDate(ref: SubscriptionRef, startDate: string, now = new Date()) {
+    return mutateSubscription(ref, now, (sub) => {
+      assertChangeable(sub, now);
+      const first = parseDateKey(sub.schedule[0]);
+      if (sub.deliveriesCompleted > 0 || (first && first < changeEffectiveFrom(now)))
+        throw new ScheduleError("The start date can't change once the first delivery is due.");
+      const start = validateStartDate(startDate, now);
+      const plan = planSchedule({ planId: sub.planId, durationId: sub.durationId, days: sub.days, startDate: dateKey(start) }, now);
+      const next: ItemSubscription = {
+        ...sub,
+        startDate: plan.start.toISOString(),
+        endDate: plan.end.toISOString(),
+        anchorDate: plan.anchor,
+        // Pauses that no longer fall inside the subscription are dropped.
+        pauses: sub.pauses.filter((p) => p.to === null || p.to >= dateKey(plan.start)),
+      };
+      // Nothing has been delivered yet, so the whole schedule is rebuilt from the new start.
+      next.schedule = rebuildSchedule({ ...next, schedule: [] }, firstEligibleDay(plan.start, now));
+      if (!next.schedule.length) throw new ScheduleError("No deliveries fall after that start date. Pick another date.");
+      return log(next, "START_DATE", `Starts ${dateKey(plan.start)}`, now);
+    });
+  },
+
+  /** Skip deliveries between two days (inclusive). `to` null = until resumed. */
+  pause(ref: SubscriptionRef, range: { from: string; to: string | null }, now = new Date()) {
+    return mutateSubscription(ref, now, (sub) => {
+      assertChangeable(sub, now);
+      const from = parseDateKey(range.from);
+      const to = range.to === null ? null : parseDateKey(range.to);
+      const earliest = changeEffectiveFrom(now);
+      if (!from) throw new ScheduleError("Enter a valid pause start date.");
+      if (range.to !== null && !to) throw new ScheduleError("Enter a valid resume date.");
+      if (from < earliest) throw new ScheduleError("A pause can start from tomorrow at the earliest.");
+      if (from >= new Date(sub.endDate)) throw new ScheduleError("That date is after the subscription ends.");
+      if (to && to < from) throw new ScheduleError("The pause has to end after it starts.");
+      if (to && (to.getTime() - from.getTime()) / 86_400_000 + 1 > MAX_PAUSE_DAYS)
+        throw new ScheduleError(`A pause can last up to ${MAX_PAUSE_DAYS} days.`);
+      const today = dateKey(startOfDay(now));
+      if (sub.pauses.some((p) => p.to === null || p.to >= today))
+        throw new ScheduleError("This subscription already has a pause. Resume it before adding another.");
+      const pause: Pause = { from: range.from, to: range.to, createdAt: now.toISOString() };
+      const next = { ...sub, pauses: [...sub.pauses, pause] };
+      next.schedule = rebuildSchedule(next, earliest);
+      return log(next, "PAUSE", range.to ? `Paused ${range.from} to ${range.to}` : `Paused from ${range.from}`, now);
+    });
+  },
+
+  /** Ends the current or upcoming pause; deliveries restart from tomorrow. */
+  resume(ref: SubscriptionRef, now = new Date()) {
+    return mutateSubscription(ref, now, (sub) => {
+      assertChangeable(sub, now);
+      const today = dateKey(startOfDay(now));
+      const earliest = changeEffectiveFrom(now);
+      const i = sub.pauses.findIndex((p) => p.to === null || p.to >= today);
+      if (i < 0) throw new ScheduleError("This subscription isn't paused.");
+      const p = sub.pauses[i]!;
+      const pauses =
+        p.from >= dateKey(earliest)
+          ? sub.pauses.filter((_, j) => j !== i) // hadn't started: drop it
+          : sub.pauses.map((x, j) => (j === i ? { ...x, to: today } : x)); // ends today
+      const next = { ...sub, pauses };
+      next.schedule = rebuildSchedule(next, earliest);
+      return log(next, "RESUME", `Resumed from ${dateKey(earliest)}`, now);
+    });
+  },
+
+  /** Cancels all deliveries from tomorrow. Deliveries already made stay in the history. */
+  cancel(ref: SubscriptionRef, now = new Date()) {
+    return mutateSubscription(ref, now, (sub) => {
+      assertChangeable(sub, now);
+      const next = { ...sub, cancelledAt: now.toISOString() };
+      next.schedule = rebuildSchedule(next, changeEffectiveFrom(now));
+      return log(next, "CANCEL", "Cancelled", now);
+    });
   },
 };

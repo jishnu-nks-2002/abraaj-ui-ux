@@ -1,5 +1,6 @@
 import { DEFAULT_DURATION, GALLON_ID, durationById, plans, type Product } from "@/lib/abraaj-data";
 import { evaluateCoupon, type Coupon, type CouponEvaluation } from "@/lib/coupons";
+import type { Weekday } from "@/lib/schedule";
 
 /* ------------------------------------------------------------------ */
 /* Mixed cart                                                          */
@@ -16,6 +17,10 @@ export type CartLine = {
   qty: number;
   planId?: string | undefined;
   durationId?: string | undefined;
+  /** Subscription delivery weekdays, Monday-first (e.g. ["MON", "THU"]). */
+  days?: Weekday[] | undefined;
+  /** Subscription start day, "2026-10-27". Empty = today. */
+  startDate?: string | undefined;
 };
 
 export const CURRENCY = "AED";
@@ -38,8 +43,11 @@ export function isSubscription(l: Pick<CartLine, "planId">) {
   return Boolean(l.planId);
 }
 
-export function lineKey(l: Pick<CartLine, "planId" | "durationId"> & { product: { id: string } }) {
-  return l.planId ? `${l.product.id}:${l.planId}:${l.durationId ?? DEFAULT_DURATION}` : `${l.product.id}:once`;
+export function lineKey(l: Pick<CartLine, "planId" | "durationId" | "days" | "startDate"> & { product: { id: string } }) {
+  // Same product on a different schedule is a separate subscription line.
+  return l.planId
+    ? `${l.product.id}:${l.planId}:${l.durationId ?? DEFAULT_DURATION}:${(l.days ?? []).join("-")}:${l.startDate ?? ""}`
+    : `${l.product.id}:once`;
 }
 
 export function lineUnitPrice(l: Pick<CartLine, "planId" | "product">) {

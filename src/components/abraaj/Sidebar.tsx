@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, HelpCircle, Info, Package, Search, Star, Ticket, X } from "lucide-react";
+import { Bell, ChevronRight, HelpCircle, Info, Package, Search, Star, Ticket, X } from "lucide-react";
 import video1 from "@/assets/side-video-1.mp4";
 import video1Poster from "@/assets/video/video-1-poster.jpg";
 import video2 from "@/assets/p1-video-white.mp4";
@@ -7,9 +7,10 @@ import logo from "@/assets/logo-2.png";
 import { APP_VERSION } from "@/lib/abraaj-data";
 
 const items = [
-  // Search now lives in the menu (moved off the top nav) so it's the first,
-  // most reachable action in the list.
+  // Search lives in the menu so it's the first, most reachable action in the list.
   { id: "search", label: "Search products", Icon: Search },
+  // Notifications moved here from the top navbar.
+  { id: "notifications", label: "Notifications", Icon: Bell },
   { id: "orders", label: "My orders", Icon: Package },
   { id: "coupons", label: "E-coupon booklets", Icon: Ticket },
   { id: "about", label: "About Abraaj", Icon: Info },
@@ -20,8 +21,8 @@ const items = [
 // Video banner carousel — add more clips here (e.g. video2 / video2Poster)
 // and they'll play in sequence, looping back to the first when done.
 const heroVideos: { src: string; poster?: string }[] = [
-  { src: video1, },
-  { src: video2, },
+  { src: video1 },
+  { src: video2 },
 ];
 
 export function Sidebar({
@@ -29,11 +30,14 @@ export function Sidebar({
   onClose,
   onViewAll,
   onSelect,
+  unreadCount = 0,
 }: {
   open: boolean;
   onClose: () => void;
   onViewAll: () => void;
   onSelect?: (id: string) => void;
+  /** Unread notifications, shown as a badge on the Notifications row. */
+  unreadCount?: number;
 }) {
   const [videoIndex, setVideoIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -74,12 +78,7 @@ export function Sidebar({
         className="animate-fade absolute inset-0 bg-foreground/45"
       />
 
-      {/* Width scales with the viewport but never past 22rem, so the peek of the
-          page behind stays proportional on a 320px phone and a 430px one alike.
-          Height uses dvh so the iOS URL bar collapsing never clips the menu. */}
       <aside className="animate-drawer absolute inset-y-0 left-0 flex h-[100dvh] w-[min(87vw,22rem)] flex-col overflow-hidden bg-secondary shadow-[0_0_60px_rgba(4,20,60,0.35)]">
-        {/* Video banner carousel — cycles through heroVideos, auto-advancing
-            when each clip ends. Falls back to the poster on slow connections. */}
         <div className="relative h-[clamp(14rem,40dvh,20rem)] shrink-0 overflow-hidden">
           <video
             key={currentVideo.src}
@@ -109,7 +108,6 @@ export function Sidebar({
             className="absolute top-[max(0.75rem,env(safe-area-inset-top))] left-4 z-20 h-[clamp(2rem,9vw,2.75rem)] w-auto brightness-0 invert"
           />
 
-          {/* Progress dots showing which clip is playing — only shown with more than one */}
           {heroVideos.length > 1 && (
             <div className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
               {heroVideos.map((_, i) => (
@@ -134,7 +132,6 @@ export function Sidebar({
             <ChevronRight className="h-4 w-4 shrink-0" />
           </button>
 
-          {/* Marquee pinned flush to the very bottom edge of the video banner */}
           <div className="absolute right-0 bottom-0 left-0 z-20">
             <Ribbon text="Return refreshed" className="text-brand" diagonal={false} />
           </div>
@@ -150,12 +147,22 @@ export function Sidebar({
               }}
               className="flex w-full items-center gap-3 border-b border-border/70 py-4 text-left"
             >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-background text-brand xs:h-11 xs:w-11">
+              <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-background text-brand xs:h-11 xs:w-11">
                 <Icon className="h-[18px] w-[18px]" />
+                {id === "notifications" && unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[9px] font-bold text-primary-foreground">
+                    {unreadCount}
+                  </span>
+                )}
               </span>
               <span className="min-w-0 flex-1 truncate text-f-sm font-semibold text-foreground">
                 {label}
               </span>
+              {id === "notifications" && unreadCount > 0 && (
+                <span className="bg-aqua-soft shrink-0 rounded-full px-2 py-0.5 text-f-2xs font-bold text-brand">
+                  {unreadCount} new
+                </span>
+              )}
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           ))}

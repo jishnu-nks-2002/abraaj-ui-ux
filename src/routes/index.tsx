@@ -790,14 +790,14 @@ function App() {
               <TabButton active={tab === "home"} Icon={Home} label="Home" onClick={() => setTab("home")} />
             </li>
 
-            {/* Cart — takes the spot Shop used to have (Shop opens from the header search icon). */}
+            {/* E-coupons. Badge shows how many e-coupons the customer has left. */}
             <li className="flex-1">
               <TabButton
-                active={tab === "cart"}
-                Icon={ShoppingBag}
-                label="Cart"
-                badge={count}
-                onClick={() => setTab("cart")}
+                active={tab === "coupons"}
+                Icon={Ticket}
+                label="E-coupons"
+                badge={couponsLeft}
+                onClick={() => openCoupons()}
               />
             </li>
 
@@ -825,14 +825,14 @@ function App() {
               </button>
             </li>
 
-            {/* E-coupons. Badge shows how many e-coupons the customer has left. */}
+            {/* Cart */}
             <li className="flex-1">
               <TabButton
-                active={tab === "coupons"}
-                Icon={Ticket}
-                label="E-coupons"
-                badge={couponsLeft}
-                onClick={() => openCoupons()}
+                active={tab === "cart"}
+                Icon={ShoppingBag}
+                label="Cart"
+                badge={count}
+                onClick={() => setTab("cart")}
               />
             </li>
 

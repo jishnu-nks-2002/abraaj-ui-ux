@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Info } from "lucide-react";
+import { ChevronRight, Coins, Info } from "lucide-react";
 import {
   DEAL_OFF,
   byId,
@@ -151,16 +151,23 @@ export function ShowcaseSection({
       </div>
 
       {/* Product cards */}
+      {/* Two columns; a lone product is centred at the same width as a normal card. */}
       <div className="mt-3 grid grid-cols-2 gap-2.5 xs:mt-4 xs:gap-3">
         {list.map((p, i) => (
-          <DealCard
+          <div
             key={`${showcase.id}-${p.id}`}
-            product={p}
-            delay={i * 60}
-            onOpen={() => onOpen(p)}
-            onSubscribe={() => onSubscribe(p)}
-            onOneTime={() => onOneTime?.(p)}
-          />
+            className={`flex min-w-0 flex-col ${
+              list.length === 1 ? "col-span-2 mx-auto w-[calc(50%-0.3125rem)]" : ""
+            }`}
+          >
+            <DealCard
+              product={p}
+              delay={i * 60}
+              onOpen={() => onOpen(p)}
+              onSubscribe={() => onSubscribe(p)}
+              onOneTime={() => onOneTime?.(p)}
+            />
+          </div>
         ))}
       </div>
 
@@ -244,6 +251,11 @@ export function DealCard({
         <p className="truncate text-f-2xs text-muted-foreground">
           {product.pack}
         </p>
+
+        {/* Coins earned */}
+        <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-aqua-soft px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-aqua">
+          <Coins className="h-3 w-3 shrink-0" />+{product.coins} coins
+        </span>
       </button>
 
       {/* Purchase options */}

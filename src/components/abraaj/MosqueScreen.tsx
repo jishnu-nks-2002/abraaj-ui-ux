@@ -1,27 +1,32 @@
-import { useEffect, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, MapPin, Plus, Repeat, ShoppingBag } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useEffect, useMemo, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, MapPin, Navigation, Plus, Repeat, Search, ShoppingBag, X } from "lucide-react";
 import { MosqueIcon } from "@/components/abraaj/HomeCategories";
 import { money, plans, type Product } from "@/lib/abraaj-data";
 import {
   DEFAULT_SUB_PLAN,
+  GOV_LABEL,
   PLAN_OFF,
+  TYPE_LABEL,
+  TYPE_ORDER,
+  areas,
+  mapsUrl,
+  norm,
   placeById,
   placeProducts,
   places,
+  searchPlaces,
   subTotals,
   subUnitPrice,
+  type Place,
+  type PlaceType,
   type SubLine,
 } from "@/lib/mosque-data";
+
+const PAGE = 20;
+const TYPE_COUNT = Object.fromEntries(TYPE_ORDER.map((t) => [t, places.filter((p) => p.type === t).length])) as Record<
+  PlaceType,
+  number
+>;
 
 export function MosqueScreen({
   placeId,
@@ -45,8 +50,40 @@ export function MosqueScreen({
   const place = placeById(placeId);
   const list = place ? placeProducts(place) : [];
   const totals = subTotals(subLines);
-  const mosques = places.filter((p) => p.kind === "mosque");
-  const others = places.filter((p) => p.kind === "place");
+
+  // The picker is open until a place is chosen; "Change" re-opens it.
+  const [picking, setPicking] = useState(!place);
+
+  const [query, setQuery] = useState("");
+  const [area, setArea] = useState<string | null>(null);
+  const [gov, setGov] = useState<string | null>(null);
+  const [type, setType] = useState<PlaceType | null>(null);
+  const [limit, setLimit] = useState(PAGE);
+
+  useEffect(() => setLimit(PAGE), [query, area, gov, type]);
+
+  const results = useMemo(() => searchPlaces({ query, area, gov, type }), [query, area, gov, type]);
+
+  // Area suggestions: match the typed text; otherwise the busiest areas (within the chosen governorate).
+  const areaSuggestions = useMemo(() => {
+    const tokens = norm(query).split(" ").filter(Boolean);
+    const pool = areas.filter((a) => (!gov || a.governorate === gov) && tokens.every((t) => a.q.includes(t)));
+    return pool.slice(0, tokens.length ? 8 : 10);
+  }, [query, gov]);
+
+  const hasFilter = !!(query.trim() || area || gov || type);
+
+  function choose(p: Place) {
+    onPlace(p.id);
+    setPicking(false);
+  }
+
+  function clearAll() {
+    setQuery("");
+    setArea(null);
+    setGov(null);
+    setType(null);
+  }
 
   return (
     <section className="animate-rise">
@@ -74,59 +111,186 @@ export function MosqueScreen({
 
       <h1 className="mt-3 text-f-xl font-extrabold tracking-tight text-foreground">Mosque & community</h1>
       <p className="mt-1 text-f-sm text-muted-foreground">
-        Choose where the water should go, then subscribe to regular deliveries.
+        Find a place by area, then subscribe to regular deliveries.
       </p>
 
-      <label className="mt-4 block text-f-xs font-bold text-foreground" id="place-label">
-        Mosque or place
-      </label>
-      <Select value={placeId ?? ""} onValueChange={onPlace}>
-        <SelectTrigger
-          aria-labelledby="place-label"
-          className="mt-1.5 h-auto min-h-14 rounded-2xl border-0 bg-secondary px-4 py-3 text-left text-base shadow-none focus:ring-2 focus:ring-brand [&>svg]:opacity-100 [&>svg]:text-brand"
-        >
-          <SelectValue placeholder="Select a mosque or place">
-            {place && (
-              <span className="flex min-w-0 items-center gap-2.5">
-                <MapPin className="h-4 w-4 shrink-0 text-brand" />
-                <span className="min-w-0">
-                  <span className="block truncate text-f-sm font-bold text-foreground">{place.name}</span>
-                  <span className="block truncate text-f-2xs text-muted-foreground">{place.area}</span>
-                </span>
-              </span>
-            )}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent className="max-h-[min(60dvh,24rem)] rounded-2xl">
-          <SelectGroup>
-            <SelectLabel className="text-f-2xs text-muted-foreground">Mosques</SelectLabel>
-            {mosques.map((p) => (
-              <PlaceItem key={p.id} id={p.id} name={p.name} area={p.area} />
-            ))}
-          </SelectGroup>
-          <SelectSeparator />
-          <SelectGroup>
-            <SelectLabel className="text-f-2xs text-muted-foreground">Other places</SelectLabel>
-            {others.map((p) => (
-              <PlaceItem key={p.id} id={p.id} name={p.name} area={p.area} />
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-
-      {!place && (
-        <div className="mt-8 text-center">
-          <div className="bg-aqua-soft mx-auto grid h-24 w-24 place-items-center rounded-full p-4 text-aqua">
-            <MosqueIcon />
+      {/* ------------------------------ Selected place ------------------------------ */}
+      {place && !picking && (
+        <div className="mt-4 flex items-center gap-2.5 rounded-2xl bg-secondary px-4 py-3">
+          <MapPin className="h-4 w-4 shrink-0 text-brand" />
+          <div className="min-w-0 flex-1">
+            <span dir="auto" className="block truncate text-f-sm font-bold text-foreground">
+              {place.name}
+            </span>
+            <span dir="auto" className="block truncate text-f-2xs text-muted-foreground">
+              {place.area}
+              {place.block ? ` · Block ${place.block}` : ""}
+            </span>
           </div>
-          <p className="mt-3 text-f-sm font-bold text-foreground">Pick a mosque to get started</p>
-          <p className="mx-auto mt-1 max-w-[16rem] text-f-xs text-muted-foreground">
-            Each place shows the products it needs, so your delivery is actually useful.
-          </p>
+          <a
+            href={mapsUrl(place)}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open in maps"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-background text-brand"
+          >
+            <Navigation className="h-4 w-4" />
+          </a>
+          <button
+            onClick={() => setPicking(true)}
+            className="shrink-0 rounded-full bg-brand px-3 py-1.5 text-f-2xs font-bold text-primary-foreground"
+          >
+            Change
+          </button>
         </div>
       )}
 
-      {place && (
+      {/* ------------------------------ Picker ------------------------------ */}
+      {picking && (
+        <div className="mt-4">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-brand" />
+            <input
+              dir="auto"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search area or name (e.g. السالمية)"
+              aria-label="Search by area or name"
+              className="h-12 w-full rounded-2xl border-0 bg-secondary pr-10 pl-11 text-base text-foreground shadow-none outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-brand"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute top-1/2 right-3 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full bg-background text-muted-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Governorate */}
+          <div className="no-scrollbar -mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label="Governorate">
+            <Chip active={!gov} onClick={() => setGov(null)}>
+              All Kuwait
+            </Chip>
+            {Object.entries(GOV_LABEL).map(([id, g]) => (
+              <Chip key={id} active={gov === id} onClick={() => setGov(gov === id ? null : id)}>
+                {g.en}
+              </Chip>
+            ))}
+          </div>
+
+          {/* Type */}
+          <div className="no-scrollbar -mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label="Place type">
+            <Chip active={!type} onClick={() => setType(null)} subtle>
+              All types
+            </Chip>
+            {TYPE_ORDER.map((t) => (
+              <Chip key={t} active={type === t} onClick={() => setType(type === t ? null : t)} subtle>
+                {TYPE_LABEL[t]} · {TYPE_COUNT[t]}
+              </Chip>
+            ))}
+          </div>
+
+          {/* Area suggestions */}
+          {!area && areaSuggestions.length > 0 && (
+            <div className="mt-3">
+              <p className="text-f-2xs font-bold text-muted-foreground">{query.trim() ? "Matching areas" : "Popular areas"}</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {areaSuggestions.map((a) => (
+                  <button
+                    key={a.name}
+                    onClick={() => {
+                      setArea(a.name);
+                      setQuery("");
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full bg-aqua-soft px-3 py-1.5 text-f-2xs font-semibold text-foreground"
+                  >
+                    <MapPin className="h-3 w-3 text-brand" />
+                    <span dir="auto">{a.name}</span>
+                    <span className="text-muted-foreground">{a.count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {area && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-f-2xs font-bold text-primary-foreground">
+                <MapPin className="h-3 w-3" />
+                <span dir="auto">{area}</span>
+                <button onClick={() => setArea(null)} aria-label="Remove area filter">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            </div>
+          )}
+
+          {/* Results */}
+          <div className="mt-4 flex items-end justify-between gap-2">
+            <h2 className="text-f-base font-bold text-foreground">{hasFilter ? "Results" : "All places"}</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-f-2xs text-muted-foreground">{results.length} found</span>
+              {hasFilter && (
+                <button onClick={clearAll} className="text-f-2xs font-bold text-brand">
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {results.length === 0 ? (
+            <div className="mt-6 text-center">
+              <p className="text-f-sm font-bold text-foreground">No places match</p>
+              <p className="mx-auto mt-1 max-w-[16rem] text-f-xs text-muted-foreground">
+                Try a different area name, or clear the filters. Names are in Arabic.
+              </p>
+            </div>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {results.slice(0, limit).map((p) => (
+                <li key={p.id}>
+                  <button
+                    onClick={() => choose(p)}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left transition-colors ${
+                      p.id === placeId ? "bg-aqua-soft" : "bg-secondary"
+                    }`}
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-background p-2 text-brand">
+                      {p.kind === "mosque" ? <MosqueIcon /> : <MapPin className="h-4 w-4" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span dir="auto" className="block truncate text-f-sm font-semibold text-foreground">
+                        {p.name}
+                      </span>
+                      <span dir="auto" className="block truncate text-f-2xs text-muted-foreground">
+                        {p.areaName}
+                        {p.block ? ` · Block ${p.block}` : ""} · {TYPE_LABEL[p.type]}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {results.length > limit && (
+            <button
+              onClick={() => setLimit((n) => n + PAGE)}
+              className="mt-3 w-full rounded-2xl border border-border bg-background py-2.5 text-f-xs font-bold text-foreground"
+            >
+              Show more ({results.length - limit} left)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ------------------------------ Products ------------------------------ */}
+      {place && !picking && (
         <div key={place.id} className="animate-rise">
           <p className="bg-aqua-soft mt-3 rounded-2xl px-3.5 py-2.5 text-f-xs text-foreground">{place.note}</p>
 
@@ -174,14 +338,31 @@ export function MosqueScreen({
   );
 }
 
-function PlaceItem({ id, name, area }: { id: string; name: string; area: string }) {
+function Chip({
+  active,
+  onClick,
+  children,
+  subtle,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  subtle?: boolean;
+}) {
   return (
-    <SelectItem value={id} className="rounded-lg py-2.5 pr-8 pl-2">
-      <span className="block">
-        <span className="block text-sm font-semibold text-foreground">{name}</span>
-        <span className="block text-xs text-muted-foreground">{area}</span>
-      </span>
-    </SelectItem>
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`shrink-0 rounded-full px-3 py-1.5 text-f-2xs font-semibold whitespace-nowrap transition-colors ${
+        active
+          ? "bg-brand text-primary-foreground"
+          : subtle
+            ? "border border-border bg-background text-muted-foreground"
+            : "bg-secondary text-muted-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

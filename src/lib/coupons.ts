@@ -37,83 +37,11 @@ export type Coupon = {
   tag?: string;
 };
 
-export const coupons: Coupon[] = [
-  {
-    id: "abraaj10",
-    code: "ABRAAJ10",
-    kind: "percent",
-    value: 10,
-    maxOff: 15,
-    minSpend: 30,
-    title: "10% off your order",
-    description: "On any water, up to AED 15 off.",
-    stub: "10%",
-    stubSub: "OFF",
-    scope: { label: "All products" },
-    validUntil: "31 Dec 2026",
-    expiresAt: "2026-12-31T23:59:59",
-    tag: "Most used",
-  },
-  {
-    id: "gallon5",
-    code: "GALLON5",
-    kind: "flat",
-    value: 5,
-    minSpend: 12,
-    title: "AED 5 off 5 Gallon",
-    description: "Flat AED 5 off on 5 Gallon bottles.",
-    stub: "AED 5",
-    stubSub: "OFF",
-    scope: { categories: ["Gallons"], label: "5 Gallon bottles" },
-    validUntil: "30 Nov 2026",
-    expiresAt: "2026-11-30T23:59:59",
-  },
-  {
-    id: "freedel",
-    code: "FREEDEL",
-    kind: "delivery",
-    value: 0,
-    minSpend: 1,
-    title: "Free delivery",
-    description: "Skip the AED 5 delivery fee on small orders.",
-    stub: "FREE",
-    stubSub: "DELIVERY",
-    scope: { label: "Orders under AED 50" },
-    validUntil: "31 Dec 2026",
-    expiresAt: "2026-12-31T23:59:59",
-  },
-  {
-    id: "alka15",
-    code: "ALKA15",
-    kind: "percent",
-    value: 15,
-    maxOff: 10,
-    minSpend: 9,
-    title: "15% off Alkaline",
-    description: "Alkaline water, up to AED 10 off.",
-    stub: "15%",
-    stubSub: "OFF",
-    scope: { categories: ["Alkaline"], label: "Alkaline water" },
-    validUntil: "15 Nov 2026",
-    expiresAt: "2026-11-15T23:59:59",
-    tag: "New",
-  },
-  {
-    id: "subsave",
-    code: "SUBSAVE",
-    kind: "percent",
-    value: 15,
-    maxOff: 20,
-    minSpend: 20,
-    title: "Extra 15% on subscriptions",
-    description: "On top of your plan discount, on the first delivery.",
-    stub: "15%",
-    stubSub: "EXTRA",
-    scope: { purchase: "sub", label: "Subscriptions only" },
-    validUntil: "31 Dec 2026",
-    expiresAt: "2026-12-31T23:59:59",
-  },
-];
+/**
+ * Promo coupons removed: the only coupon product now is the single
+ * 20-gallon e-coupon booklet (handled in lib/booklets).
+ */
+export const coupons: Coupon[] = [];
 
 export const couponByCode = (code: string) =>
   coupons.find((c) => c.code.toLowerCase() === code.trim().toLowerCase());

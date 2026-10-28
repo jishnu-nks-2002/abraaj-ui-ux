@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Plus } from "lucide-react";
+import { Check, ChevronDown, Coins, Plus } from "lucide-react";
 import type { Product } from "@/lib/abraaj-data";
 // Put any water / texture / pattern image here. Used by the "image background" designs.
 import cardBg from "@/assets/card-bg-4.png";
@@ -145,11 +145,21 @@ function AddButton({ product, onAdd, tone }: { product: Product; onAdd: () => vo
   );
 }
 
+/** Price with the coins this product earns shown underneath. */
 function Price({ product, tone }: { product: Product; tone: Tone }) {
   return (
-    <span className={`truncate text-f-sm font-extrabold ${tone === "dark" ? "text-white" : "text-brand"}`}>
-      AED {product.price}
-    </span>
+    <div className="flex min-w-0 flex-col">
+      <span className={`truncate text-f-sm font-extrabold ${tone === "dark" ? "text-white" : "text-brand"}`}>
+        AED {product.price}
+      </span>
+      <span
+        className={`mt-0.5 flex items-center gap-1 text-[10px] font-bold whitespace-nowrap ${
+          tone === "dark" ? "text-white/85" : "text-aqua"
+        }`}
+      >
+        <Coins className="h-3 w-3 shrink-0" />+{product.coins} coins
+      </span>
+    </div>
   );
 }
 

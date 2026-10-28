@@ -1,79 +1,150 @@
 import { byId, plans, type Product } from "@/lib/abraaj-data";
+import { rawPlaces } from "@/lib/kuwait-places-raw";
 
 /* ------------------------------------------------------------------ */
-/* Mosques & community places                                          */
+/* Mosques & community places (Kuwait)                                 */
 /* ------------------------------------------------------------------ */
 
 export type PlaceKind = "mosque" | "place";
+export type PlaceType = "mosque" | "hussainiya" | "health" | "hospital" | "church" | "cemetery";
 
 export type Place = {
   id: string;
   name: string;
   kind: PlaceKind;
+  type: PlaceType;
+  /** Area name (Arabic, as in the source data). */
+  areaName: string;
+  governorate: string;
+  /** "Area, Governorate" line shown under the name. */
   area: string;
+  block: string;
+  street: string;
+  lat: number;
+  lon: number;
   /** Short line shown under the selector once the place is picked. */
   note: string;
   /** Products this place accepts, in display order. */
   productIds: string[];
+  /** Normalised haystack used by the search box. */
+  q: string;
 };
 
-export const places: Place[] = [
-  {
-    id: "jumeirah",
-    name: "Jumeirah Mosque",
-    kind: "mosque",
-    area: "Jumeirah 1, Dubai",
-    note: "Dispenser gallons and small bottles for worshippers after prayer.",
-    productIds: ["gal5", "ml200", "ml330", "tissue"],
-  },
-  {
-    id: "al-farooq",
-    name: "Al Farooq Omar Bin Al Khattab Mosque",
-    kind: "mosque",
-    area: "Al Safa, Dubai",
-    note: "Large congregation on Fridays — gallons and 330 ml packs go fastest.",
-    productIds: ["gal5", "ml330", "ml500", "tissue"],
-  },
-  {
-    id: "al-barsha",
-    name: "Al Barsha Community Mosque",
-    kind: "mosque",
-    area: "Al Barsha 2, Dubai",
-    note: "Neighbourhood mosque close to your saved address.",
-    productIds: ["gal5", "ml200", "tissue"],
-  },
-  {
-    id: "bur-dubai",
-    name: "Grand Mosque",
-    kind: "mosque",
-    area: "Bur Dubai",
-    note: "Visitor-heavy — small bottles are handed out at the entrance.",
-    productIds: ["ml200", "ml330", "gal5", "tissue"],
-  },
-  {
-    id: "iftar-tent",
-    name: "Ramadan Iftar Tent",
-    kind: "place",
-    area: "Al Barsha Pond Park, Dubai",
-    note: "Daily iftar service — 200 ml bottles and tissues for every tray.",
-    productIds: ["ml200", "ml330", "tissue"],
-  },
-  {
-    id: "al-quoz",
-    name: "Workers' Accommodation",
-    kind: "place",
-    area: "Al Quoz Industrial 3, Dubai",
-    note: "Keep a site supplied through the hot months.",
-    productIds: ["gal5", "ml500", "l15"],
-  },
-];
+export const TYPE_LABEL: Record<PlaceType, string> = {
+  mosque: "Mosque",
+  hussainiya: "Hussainiya",
+  health: "Health centre",
+  hospital: "Hospital",
+  church: "Church",
+  cemetery: "Cemetery",
+};
+
+export const TYPE_ORDER: PlaceType[] = ["mosque", "hussainiya", "health", "hospital", "church", "cemetery"];
+
+export const GOV_LABEL: Record<string, { en: string; ar: string }> = {
+  capital: { en: "Capital", ar: "العاصمة" },
+  hawalli: { en: "Hawalli", ar: "حولي" },
+  farwaniya: { en: "Farwaniya", ar: "الفروانية" },
+  ahmadi: { en: "Ahmadi", ar: "الأحمدي" },
+  jahra: { en: "Jahra", ar: "الجهراء" },
+  mubarak: { en: "Mubarak Al-Kabeer", ar: "مبارك الكبير" },
+};
+
+const TYPE_PRODUCTS: Record<PlaceType, string[]> = {
+  mosque: ["gal5", "ml330", "ml200", "tissue"],
+  hussainiya: ["gal5", "ml330", "ml200", "tissue"],
+  health: ["ml200", "ml330", "ml500", "gal5"],
+  hospital: ["ml200", "ml330", "ml500", "gal5"],
+  church: ["ml330", "gal5", "tissue"],
+  cemetery: ["ml500", "gal5", "ml330"],
+};
+
+const TYPE_NOTE: Record<PlaceType, string> = {
+  mosque: "Dispenser gallons and small bottles for worshippers after prayer.",
+  hussainiya: "Gallons and small bottles for gatherings and recitation nights.",
+  health: "Small bottles for patients and visitors in the waiting area.",
+  hospital: "Bottles and gallons for wards, visitors and staff.",
+  church: "Bottles and gallons for the congregation.",
+  cemetery: "Bottles and gallons for visitors, especially in the hot months.",
+};
+
+/** Arabic-friendly normaliser: strips diacritics and folds look-alike letters. */
+export function norm(s: string) {
+  return s
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export const places: Place[] = rawPlaces.map(([type, name, gov, areaName, block, street, lat, lon], i) => {
+  const t = type as PlaceType;
+  const g = GOV_LABEL[gov];
+  return {
+    id: `kw-${i}`,
+    name,
+    kind: t === "mosque" ? "mosque" : "place",
+    type: t,
+    areaName,
+    governorate: gov,
+    area: `${areaName}, ${g.ar}`,
+    block,
+    street,
+    lat,
+    lon,
+    note: TYPE_NOTE[t],
+    productIds: TYPE_PRODUCTS[t],
+    q: norm(`${name} ${areaName} ${g.ar} ${g.en} ${TYPE_LABEL[t]} ${street} block ${block}`),
+  };
+});
+
+const byPlaceId = new Map(places.map((p) => [p.id, p]));
 
 export function placeById(id: string | null | undefined) {
-  return places.find((p) => p.id === id);
+  return id ? byPlaceId.get(id) : undefined;
 }
 
 export function placeProducts(place: Place): Product[] {
   return place.productIds.map(byId).filter(Boolean) as Product[];
+}
+
+/** Every area in the data with its place count, biggest first. */
+export type AreaInfo = { name: string; governorate: string; count: number; q: string };
+
+export const areas: AreaInfo[] = (() => {
+  const m = new Map<string, AreaInfo>();
+  for (const p of places) {
+    const a = m.get(p.areaName);
+    if (a) a.count++;
+    else
+      m.set(p.areaName, {
+        name: p.areaName,
+        governorate: p.governorate,
+        count: 1,
+        q: norm(`${p.areaName} ${GOV_LABEL[p.governorate].en}`),
+      });
+  }
+  return [...m.values()].sort((a, b) => b.count - a.count);
+})();
+
+export function searchPlaces(opts: { query: string; area: string | null; gov: string | null; type: PlaceType | null }) {
+  const tokens = norm(opts.query).split(" ").filter(Boolean);
+  return places.filter(
+    (p) =>
+      (!opts.area || p.areaName === opts.area) &&
+      (!opts.gov || p.governorate === opts.gov) &&
+      (!opts.type || p.type === opts.type) &&
+      tokens.every((t) => p.q.includes(t)),
+  );
+}
+
+export function mapsUrl(p: Pick<Place, "lat" | "lon">) {
+  return `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
 }
 
 /* ------------------------------------------------------------------ */

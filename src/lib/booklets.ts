@@ -216,14 +216,15 @@ function buildBooklet(
 /* Service                                                             */
 /* ------------------------------------------------------------------ */
 
-const BOOKLETS_KEY = "abraaj.booklets.v1";
-const SERIAL_KEY = "abraaj.bookletSerial.v1";
+// Bumped to v2 so browsers that already saved the old two-booklet demo data
+// (Family + Starter) start fresh with the single 20-coupon booklet.
+const BOOKLETS_KEY = "abraaj.booklets.v2";
+const SERIAL_KEY = "abraaj.bookletSerial.v2";
 const FIRST_SERIAL = 52001;
 
 /**
- * Seeds two example booklets the first time the app runs (an active Family
- * booklet part-used, and an old Starter booklet that has expired), so the
- * booklet shows every coupon status. Set to false to start with none.
+ * Seeds one example booklet the first time the app runs: the 20-coupon Family
+ * booklet, part-used. Set to false to start with none.
  */
 const SEED_DEMO_BOOKLETS = true;
 
@@ -236,17 +237,6 @@ function nextSerial() {
 function demoBooklets(now: Date): Booklet[] {
   const taken = new Set<string>();
   const family = bookletProducts.find((p) => p.id === "bk20")!;
-  const starter = bookletProducts.find((p) => p.id === "bk10")!;
-
-  const old = buildBooklet(starter, nextSerial(), taken, {
-    holder: "Ahmed H.",
-    purchasedAt: new Date(now.getTime() - 205 * DAY),
-    orderId: "ORD-9821",
-  });
-  // 7 used over its life; the last 3 expired unused.
-  old.coupons.slice(0, 7).forEach((c, i) => {
-    Object.assign(c, { status: "REDEEMED", redeemedAt: new Date(now.getTime() - (196 - i * 24) * DAY).toISOString(), orderId: `ORD-98${34 + i * 3}` });
-  });
 
   const active = buildBooklet(family, nextSerial(), taken, {
     holder: "Ahmed H.",
@@ -256,7 +246,7 @@ function demoBooklets(now: Date): Booklet[] {
   active.coupons.slice(0, 5).forEach((c, i) => {
     Object.assign(c, { status: "REDEEMED", redeemedAt: new Date(now.getTime() - (33 - i * 6) * DAY).toISOString(), orderId: `ORD-99${90 + i * 2}` });
   });
-  return [active, old].map((b) => syncBooklet(b, now));
+  return [syncBooklet(active, now)];
 }
 
 function loadAll(): Booklet[] {

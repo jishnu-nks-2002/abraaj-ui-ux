@@ -59,6 +59,17 @@ export const products: Product[] = [
     coins: 60,
   },
   {
+    id: "gal5x2",
+    name: "Abraaj 5 Gallon",
+    size: "18.9 L",
+    pack: "Pack of 2",
+    price: 23,
+    category: "Gallons",
+    image: p5gal,
+    blurb: "Two sealed dispenser bottles, delivered together and always in stock.",
+    coins: 120,
+  },
+  {
     id: "ml500",
     name: "Abraaj 500 ml",
     size: "500 ml",
@@ -117,12 +128,23 @@ export const products: Product[] = [
     id: "tissue",
     name: "Abraaj Facial Tissue",
     size: "150 x 2 ply",
-    pack: "Box of 5",
-    price: 16,
+    pack: "Single box",
+    price: 4,
     category: "Essentials",
     image: ptissue,
     blurb: "Soft everyday tissues to add to your water delivery.",
-    coins: 80,
+    coins: 20,
+  },
+  {
+    id: "tissue10",
+    name: "Abraaj Facial Tissue",
+    size: "150 x 2 ply",
+    pack: "Box of 10",
+    price: 30,
+    category: "Essentials",
+    image: ptissue,
+    blurb: "A box of 10 soft everyday tissue packs, the better value for the home or office.",
+    coins: 150,
   },
 ];
 
@@ -135,6 +157,8 @@ export const categories = ["All", "Bottles", "Gallons", "Alkaline", "Essentials"
  * Booklets are ordinary catalogue products (so the cart, checkout, orders and
  * coins all work unchanged), kept out of `products` so they don't appear in the
  * shop grid. Each coupon inside pays for one 5 Gallon bottle.
+ *
+ * There is only one booklet now: the 20-coupon Family booklet.
  */
 
 /** The product an e-coupon pays for. */
@@ -159,16 +183,6 @@ function bookletArt(count: number, cover: BookletSpec["cover"]) {
 
 const bookletSpecs: (BookletSpec & { id: string; price: number; coins: number })[] = [
   {
-    id: "bk10",
-    label: "Starter",
-    coupons: 10,
-    redeemsFor: GALLON_ID,
-    validityMonths: 6,
-    price: 110,
-    coins: 300,
-    cover: { from: "#2a63c9", to: "#3fb3e3", foil: "#bfe8ff" },
-  },
-  {
     id: "bk20",
     label: "Family",
     coupons: 20,
@@ -178,17 +192,6 @@ const bookletSpecs: (BookletSpec & { id: string; price: number; coins: number })
     coins: 650,
     cover: { from: "#1c2f86", to: "#2f8fd6", foil: "#e9c46a" },
     tag: "Most popular",
-  },
-  {
-    id: "bk30",
-    label: "Office",
-    coupons: 30,
-    redeemsFor: GALLON_ID,
-    validityMonths: 12,
-    price: 300,
-    coins: 1000,
-    cover: { from: "#0f1d52", to: "#23468f", foil: "#e9c46a" },
-    tag: "Best value",
   },
 ];
 
@@ -382,7 +385,7 @@ export const showcases: Showcase[] = [
     tone: "blue",
     video: sidevideo1,
     poster: video1Poster,
-    productIds: ["ml330", "ml500"],
+    productIds: ["ml200", "ml500"],
     filter: "Bottles",
   },
   {
@@ -406,7 +409,7 @@ export const showcases: Showcase[] = [
     ribbon: "Return refreshed",
     tone: "red",
     video: sidevideo1,
-    productIds: ["gal5", "ml200"],
+    productIds: ["gal5", "gal5x2"],
     filter: "Gallons",
   },
   {
@@ -418,7 +421,7 @@ export const showcases: Showcase[] = [
     ribbon: "Everyday care",
     tone: "sand",
     video: sidevideo2,
-    productIds: ["tissue", "ml200"],
+    productIds: ["tissue", "tissue10"],
     filter: "Essentials",
   },
 ];

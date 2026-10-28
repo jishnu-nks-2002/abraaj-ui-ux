@@ -482,8 +482,8 @@ function App() {
           headerHidden ? "-translate-y-full" : "translate-y-0"
         } ${headerElevated ? "shadow-[0_8px_24px_-14px_rgba(13,42,110,0.4)]" : "shadow-none"}`}
       >
-        {/* Left group: menu + cart. Notifications now live inside the sidebar, and
-            the cart button takes the spot the bell used to have. */}
+        {/* Left group: menu + search. Search opens the Shop screen; the cart now
+            lives in the bottom bar. */}
         <div className={`flex shrink-0 items-center gap-1.5 xs:gap-2 ${LOGO_ROW}`}>
           <button
             aria-label="Open menu"
@@ -497,16 +497,13 @@ function App() {
             )}
           </button>
           <button
-            aria-label="Cart"
-            onClick={() => setTab("cart")}
-            className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-8 xs:w-8"
+            aria-label="Search products"
+            onClick={() => goToShop()}
+            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full xs:h-8 xs:w-8 ${
+              tab === "shop" ? "bg-brand text-primary-foreground" : "bg-secondary text-brand"
+            }`}
           >
-            <ShoppingBag className="h-3.5 w-3.5" />
-            {count > 0 && (
-              <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[9px] font-bold text-primary-foreground">
-                {count}
-              </span>
-            )}
+            <Search className="h-3.5 w-3.5" />
           </button>
         </div>
 
@@ -520,18 +517,9 @@ function App() {
           }`}
         />
 
-        {/* Right group: coins (loops coins ↔ KWD) + profile. */}
+        {/* Right group: coins (loops coins ↔ KWD). Profile now lives in the bottom bar. */}
         <div className="flex shrink-0 items-center gap-1.5 xs:gap-2">
           <CoinChip coins={totalCoins} onClick={() => setTab("account")} />
-          <button
-            aria-label="Profile"
-            onClick={() => setTab("account")}
-            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full xs:h-8 xs:w-8 ${
-              tab === "account" ? "bg-brand text-primary-foreground" : "bg-secondary text-brand"
-            }`}
-          >
-            <User className="h-3.5 w-3.5" />
-          </button>
         </div>
       </header>
 
@@ -798,16 +786,20 @@ function App() {
 
         <nav className="border-t border-border bg-background/95 px-2 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md xs:px-4">
           <ul className="flex items-end justify-between">
-            {(
-              [
-                ["home", Home, "Home"],
-                ["shop", Droplets, "Shop"],
-              ] as const
-            ).map(([key, Icon, label]) => (
-              <li key={key} className="flex-1">
-                <TabButton active={tab === key} Icon={Icon} label={label} onClick={() => setTab(key)} />
-              </li>
-            ))}
+            <li className="flex-1">
+              <TabButton active={tab === "home"} Icon={Home} label="Home" onClick={() => setTab("home")} />
+            </li>
+
+            {/* Cart — takes the spot Shop used to have (Shop opens from the header search icon). */}
+            <li className="flex-1">
+              <TabButton
+                active={tab === "cart"}
+                Icon={ShoppingBag}
+                label="Cart"
+                badge={count}
+                onClick={() => setTab("cart")}
+              />
+            </li>
 
             {/* Raised deals button — stays in the true center of the 5-slot bar. */}
             <li className="flex-1">
@@ -833,17 +825,7 @@ function App() {
               </button>
             </li>
 
-            <li className="flex-1">
-              <TabButton
-                active={tab === "plan"}
-                Icon={Repeat}
-                label="Subscribe"
-                onClick={() => setTab("plan")}
-              />
-            </li>
-
-            {/* E-coupons — replaces "Me" in the bottom bar (profile moved to the top
-                navbar). Badge shows how many e-coupons the customer has left. */}
+            {/* E-coupons. Badge shows how many e-coupons the customer has left. */}
             <li className="flex-1">
               <TabButton
                 active={tab === "coupons"}
@@ -851,6 +833,16 @@ function App() {
                 label="E-coupons"
                 badge={couponsLeft}
                 onClick={() => openCoupons()}
+              />
+            </li>
+
+            {/* Profile — moved here from the top navbar. */}
+            <li className="flex-1">
+              <TabButton
+                active={tab === "account"}
+                Icon={User}
+                label="Profile"
+                onClick={() => setTab("account")}
               />
             </li>
           </ul>

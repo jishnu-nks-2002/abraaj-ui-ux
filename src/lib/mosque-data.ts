@@ -153,6 +153,7 @@ export function mapsUrl(p: Pick<Place, "lat" | "lon">) {
 
 /** Discount per delivery frequency — mirrors the "Save x%" labels on `plans`. */
 export const PLAN_OFF: Record<string, number> = {
+  once: 0,
   weekly: 15,
   biweekly: 10,
   monthly: 5,
@@ -162,11 +163,22 @@ export const DEFAULT_SUB_PLAN = "weekly";
 
 export function subUnitPrice(price: number, planId: string) {
   const off = PLAN_OFF[planId] ?? 0;
-  return Math.round(price * (1 - off / 100) * 100) / 100;
+  return Math.round(price * (1 - off / 100) * 1000) / 1000;
 }
 
 export function planLabel(planId: string) {
   return plans.find((p) => p.id === planId);
+}
+
+/** A one-time purchase in the mosque cart (no repeat, no discount). */
+export const PLAN_ONCE = "once";
+
+export function planName(planId: string) {
+  return planId === PLAN_ONCE ? "One-time" : (planLabel(planId)?.name ?? planId);
+}
+
+export function planEvery(planId: string) {
+  return planId === PLAN_ONCE ? "One-time delivery" : (planLabel(planId)?.every ?? "");
 }
 
 /* ------------------------------------------------------------------ */
@@ -174,9 +186,9 @@ export function planLabel(planId: string) {
 /* ------------------------------------------------------------------ */
 
 /**
- * A line in the Subscription Cart. Kept completely separate from the normal
- * product cart: one line per product + place + frequency, so the same product
- * can be subscribed for two different mosques.
+ * A line in the Mosque Cart. Kept completely separate from the personal
+ * product cart: one line per product + place + frequency (or "once"), so the
+ * same product can be ordered for two different mosques.
  */
 export type SubLine = {
   product: Product;
@@ -192,7 +204,7 @@ export function subLineKey(l: Pick<SubLine, "placeId" | "planId"> & { product: {
 export function subTotals(lines: SubLine[]) {
   const list = lines.reduce((n, l) => n + l.qty * l.product.price, 0);
   const perDelivery = lines.reduce((n, l) => n + l.qty * subUnitPrice(l.product.price, l.planId), 0);
-  const round = (n: number) => Math.round(n * 100) / 100;
+  const round = (n: number) => Math.round(n * 1000) / 1000;
   return {
     list: round(list),
     perDelivery: round(perDelivery),

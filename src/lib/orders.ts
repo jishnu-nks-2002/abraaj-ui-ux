@@ -154,7 +154,7 @@ export type Order = {
     bookletCoupons?: string[];
     bookletDiscount?: number;
   };
-  coinsEarned: number;
+  pointsEarned: number;
 };
 
 /* ================================================================== */
@@ -425,7 +425,7 @@ function buildItem(line: CartLine, index: number, orderSeq: number, placedAt: Da
     quantity: line.qty,
     unitPrice,
     listUnitPrice: line.product.price,
-    price: Math.round(unitPrice * line.qty * 100) / 100,
+    price: Math.round(unitPrice * line.qty * 1000) / 1000,
   };
 
   if (isDigital(line)) {
@@ -506,7 +506,7 @@ function buildOrder(input: CheckoutInput, seq: number, placedAt: Date, extras: I
         : {}),
       ...(redeemed.length ? { bookletCoupons: redeemed, bookletDiscount: pricing.bookletDiscount } : {}),
     },
-    coinsEarned: pricing.coins,
+    pointsEarned: pricing.points,
   };
   return syncOrder(order, placedAt);
 }
@@ -521,8 +521,8 @@ function buildOrder(input: CheckoutInput, seq: number, placedAt: Date, extras: I
  * real backend won't touch any UI.
  */
 
-const ORDERS_KEY = "abraaj.orders.v1";
-const SEQ_KEY = "abraaj.orderSeq.v1";
+const ORDERS_KEY = "abraaj.orders.v2";
+const SEQ_KEY = "abraaj.orderSeq.v2";
 const PROFILE_KEY = "abraaj.checkoutProfile.v1";
 const FIRST_ORDER_SEQ = 10001;
 
@@ -557,8 +557,8 @@ function demoOrder(): Order {
     nextSeq(),
     placedAt,
   );
-  // Past orders' coins are already part of BASE_COINS, so don't count them twice.
-  return { ...order, coinsEarned: 0 };
+  // Past orders' points are already part of BASE_POINTS, so don't count them twice.
+  return { ...order, pointsEarned: 0 };
 }
 
 function loadAll(): Order[] {

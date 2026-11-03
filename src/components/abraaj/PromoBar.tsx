@@ -4,7 +4,7 @@ import { GlassWater, Percent, Truck } from "lucide-react";
 const messages = [
   { Icon: Percent, text: "Smart savings start here", cta: "Subscribe", go: "plan" },
   { Icon: GlassWater, text: "Stay cool, stay hydrated", cta: "Order now", go: "shop" },
-  { Icon: Truck, text: "Free delivery over AED 50", cta: "Shop deals", go: "deals" },
+  { Icon: Truck, text: "Free delivery over KWD 4", cta: "Shop deals", go: "deals" },
 ] as const;
 
 export function PromoBar({ onCta }: { onCta: (go: string) => void }) {

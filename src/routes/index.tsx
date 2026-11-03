@@ -4,7 +4,6 @@ import {
   ArrowDownUp,
   Check,
   ChevronRight,
-  Coins,
   Droplets,
   Home,
   Menu,
@@ -14,23 +13,31 @@ import {
   Search,
   ShoppingBag,
   SlidersHorizontal,
+  Star,
   Tag,
   Ticket,
   Truck,
   User,
+  Wallet,
   X,
 } from "lucide-react";
 import logo from "@/assets/logo-2.png";
 import { Splash } from "@/components/abraaj/Splash";
 import { Sidebar } from "@/components/abraaj/Sidebar";
+import { ThemeMenuButton } from "@/components/abraaj/ThemeToggle";
 import { DealCard, ShowcaseSection } from "@/components/abraaj/CategoryShowcase";
 import { Moments } from "@/components/abraaj/Moments";
 import { PromoBar } from "@/components/abraaj/PromoBar";
 import { HomeCategories, type HomeCategoryId } from "@/components/abraaj/HomeCategories";
 import { PopularCarousel } from "@/components/abraaj/PopularCarousel";
+import { WalletHistoryScreen, WalletScreen } from "@/components/abraaj/Wallet";
+import { PointsHistoryScreen, PointsScreen } from "@/components/abraaj/Points";
+import { AccountSessionActions, SignedOutScreen } from "@/components/abraaj/AccountActions";
 import { AboutScreen } from "@/components/abraaj/AboutScreen";
 import { MosqueScreen } from "@/components/abraaj/MosqueScreen";
 import { SubscriptionCartScreen, SubscriptionCheckoutScreen } from "@/components/abraaj/SubscriptionCart";
+import { MosqueOrdersScreen, MosqueTrackScreen, OrderHistoryPreview, type MosqueOrdersTab } from "@/components/abraaj/MosqueOrders";
+import { mosqueOrdersApi, type MosqueOrder } from "@/lib/mosque-orders";
 import { NotificationsPanel } from "@/components/abraaj/NotificationsPanel";
 import { CheckoutScreen } from "@/components/abraaj/Checkout";
 import { CartCoupon } from "@/components/abraaj/Coupons";
@@ -58,13 +65,23 @@ import {
   lineUnitPrice,
   type CartLine,
 } from "@/lib/cart";
-import { formatDate, ordersApi, subscriptionDates, subscriptionsApi, type Order } from "@/lib/orders";
+import { ORDER_STATUS_LABEL, formatDate, ordersApi, subscriptionDates, subscriptionsApi, type Order } from "@/lib/orders";
+import { authApi, type SessionStatus } from "@/lib/auth";
+import {
+  WalletError,
+  availablePoints,
+  pointsEvents,
+  pointsToKwd,
+  walletApi,
+  walletBalance,
+  type WalletMethod,
+  type WalletTxn,
+} from "@/lib/wallet";
 import { DateChips, DateField, SubscriptionsScreen, WeekdayPicker } from "@/components/abraaj/Schedule";
 import { PLAN_RULES, START_WINDOW_DAYS, dateKey, defaultDays, fitDaysToPlan, parseDateKey, scheduleLabel, type Weekday } from "@/lib/schedule";
 import { subLineKey, subTotals, type SubLine } from "@/lib/mosque-data";
 import { initialNotifications, type AppNotification } from "@/lib/notifications-data";
 import {
-  BASE_COINS,
   DEFAULT_DURATION,
   GALLON_ID,
   byId,
@@ -100,7 +117,7 @@ export const Route = createFileRoute("/")({
 type Tab = "home" | "shop" | "deals" | "plan" | "cart" | "account";
 // Full-screen pages that aren't in the tab bar. Kept in the same `tab` state so
 // they share the header, bottom nav and cart state with the rest of the app.
-type Screen = Tab | "about" | "mosque" | "subcart" | "subcheckout" | "checkout" | "orders" | "order" | "track" | "coupons" | "subscriptions";
+type Screen = Tab | "about" | "mosque" | "subcart" | "subcheckout" | "mosqueorders" | "mosquetrack" | "checkout" | "orders" | "order" | "track" | "coupons" | "subscriptions" | "wallet" | "wallethistory" | "points" | "pointshistory";
 
 // Shared between the header logo and the travelling boot logo so the flight always
 // lands on the exact size and position of the real one, at any screen width.
@@ -109,10 +126,9 @@ const LOGO_SIZE = "h-[clamp(3.25rem,14vw,4.5rem)]";
 // Keeps the header row exactly as tall as the logo so the logo sits flush with the top padding.
 const LOGO_ROW = "min-h-[clamp(3.25rem,14vw,4.5rem)]";
 
-// Coin → Kuwaiti Dinar conversion used by the looping coin chip in the header.
-// Change this rate to whatever 1 coin is worth in KWD.
-const COINS_TO_KWD = 0.01;
-const COIN_LOOP_MS = 2500;
+// How long the header points chip shows the points before flipping to their KWD value
+// (1,000 points = KWD 1.000, see POINTS_PER_KWD in lib/wallet).
+const POINTS_LOOP_MS = 2500;
 
 // Phases of the boot logo:
 // "center"   -> big logo centered on screen, sitting on top of the splash
@@ -120,26 +136,28 @@ const COIN_LOOP_MS = 2500;
 // "done"     -> animation finished, overlay is unmounted, the real header logo is shown
 type LogoPhase = "center" | "toHeader" | "done";
 
-/** Header coin balance that loops between the coin count and its Kuwaiti Dinar value. */
-function CoinChip({ coins, onClick }: { coins: number; onClick: () => void }) {
+/** Header points balance that loops between the points and their Kuwaiti Dinar value. */
+function PointsChip({ points, onClick }: { points: number; onClick: () => void }) {
   const [showKwd, setShowKwd] = useState(false);
 
   useEffect(() => {
-    const id = setInterval(() => setShowKwd((v) => !v), COIN_LOOP_MS);
+    const id = setInterval(() => setShowKwd((v) => !v), POINTS_LOOP_MS);
     return () => clearInterval(id);
   }, []);
 
-  const kwd = (coins * COINS_TO_KWD).toFixed(2);
+  const kwd = pointsToKwd(points).toFixed(3);
 
   return (
     <button
-      aria-label={showKwd ? `Your coins, worth ${kwd} Kuwaiti dinar` : `Your coins: ${coins}`}
+      aria-label={showKwd ? `Your points, worth ${kwd} Kuwaiti dinar` : `Your points: ${points}`}
       onClick={onClick}
-      className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-secondary px-2.5 text-brand xs:h-8 xs:px-3"
+      // Fixed width: the chip never resizes when it flips between points and KWD, so the
+      // header (logo, theme and cart buttons) stays put.
+      className="flex h-7 w-[4.75rem] shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full bg-secondary px-2 text-brand xs:h-8 xs:w-[5.25rem]"
     >
-      <Coins className="h-3 w-3 shrink-0" />
-      <span key={showKwd ? "kwd" : "coins"} className="animate-fade text-f-2xs font-bold whitespace-nowrap">
-        {showKwd ? `${kwd} KWD` : coins}
+      {!showKwd && <Star className="h-3 w-3 shrink-0" />}
+      <span key={showKwd ? "kwd" : "points"} className="animate-fade text-f-2xs font-bold whitespace-nowrap tabular-nums">
+        {showKwd ? `${kwd} KWD` : points}
       </span>
     </button>
   );
@@ -171,7 +189,14 @@ function App() {
   const [subFocus, setSubFocus] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderId, setOrderId] = useState<string | null>(null);
+  // Mosque orders — separate from the personal orders above.
+  const [mosqueOrders, setMosqueOrders] = useState<MosqueOrder[]>([]);
+  const [mosqueOrderId, setMosqueOrderId] = useState<string | null>(null);
+  const [mosqueTab, setMosqueTab] = useState<MosqueOrdersTab>("orders");
   const [justPlaced, setJustPlaced] = useState(false);
+  // Wallet ledger and session. Read after mount so SSR and hydration match.
+  const [walletTxns, setWalletTxns] = useState<WalletTxn[]>([]);
+  const [session, setSession] = useState<SessionStatus>("in");
   const selectedOrder = orders.find((o) => o.id === orderId) ?? null;
 
   // Product card design chosen by the customer (saved in localStorage).
@@ -224,9 +249,17 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
+  function loadAccountData() {
     setOrders(ordersApi.list());
+    setMosqueOrders(mosqueOrdersApi.list());
     setBooklets(bookletsApi.list());
+    setWalletTxns(walletApi.list());
+  }
+
+  useEffect(() => {
+    const status = authApi.status();
+    setSession(status);
+    if (status === "in") loadAccountData();
   }, []);
 
   // Keep per-item tracking live while an orders screen is open.
@@ -234,6 +267,14 @@ function App() {
     if (tab !== "orders" && tab !== "order" && tab !== "track") return;
     setOrders(ordersApi.list());
     const id = setInterval(() => setOrders(ordersApi.list()), 30_000);
+    return () => clearInterval(id);
+  }, [tab]);
+
+  // Keep mosque tracking live while its screens are open.
+  useEffect(() => {
+    if (tab !== "mosqueorders" && tab !== "mosquetrack") return;
+    setMosqueOrders(mosqueOrdersApi.list());
+    const id = setInterval(() => setMosqueOrders(mosqueOrdersApi.list()), 30_000);
     return () => clearInterval(id);
   }, [tab]);
 
@@ -258,10 +299,12 @@ function App() {
   const pricing = cartPricing(cart, coupon, appliedPicks.length);
   const count = pricing.count;
 
-  // Coins system.
-  const cartCoins = pricing.coins;
-  const orderCoins = orders.reduce((n, o) => n + o.coinsEarned, 0);
-  const totalCoins = BASE_COINS + orderCoins + cartCoins;
+  // Points system. `redeemable` = points from earlier orders + placed orders, minus anything
+  // already redeemed to the wallet. Points still in the cart count in the total but can't be redeemed yet.
+  const cartPoints = pricing.points;
+  const redeemable = availablePoints(orders, walletTxns);
+  const totalPoints = redeemable + cartPoints;
+  const walletKwd = walletBalance(walletTxns);
 
   // E-coupons left — shown as a badge on the bottom-bar E-coupons tab.
   const couponsLeft = bookletStats(booklets).available;
@@ -432,8 +475,106 @@ function App() {
     setNotifications([]);
   }
 
+  // ---- Mosque orders ----
+  function placeMosqueOrder(info: {
+    startDate: Date;
+    slot: string;
+    payment: string;
+    name: string;
+    phone: string;
+    notes: string;
+  }) {
+    const order = mosqueOrdersApi.create({ lines: subCart, ...info });
+    setMosqueOrders(mosqueOrdersApi.list());
+    setSubCart([]);
+    return order.id;
+  }
+
+  function openMosqueOrders(t: MosqueOrdersTab = "orders") {
+    setMosqueOrders(mosqueOrdersApi.list());
+    setMosqueTab(t);
+    openScreen("mosqueorders");
+  }
+
+  function openMosqueOrder(id: string) {
+    setMosqueOrders(mosqueOrdersApi.list());
+    setMosqueOrderId(id);
+    openScreen("mosquetrack");
+  }
+
   function openScreen(s: Screen) {
     setTab(s);
+    window.scrollTo({ top: 0 });
+  }
+
+  // ---- Wallet + points ----
+  /** Returns an error message to show, or null when the money was added. */
+  function topUpWallet(amount: number, method: WalletMethod): string | null {
+    try {
+      walletApi.topUp({ amount, method });
+      setWalletTxns(walletApi.list());
+      return null;
+    } catch (e) {
+      return e instanceof WalletError ? e.message : "We couldn't add the money. Please try again.";
+    }
+  }
+
+  /** Returns an error message to show, or null when the points were redeemed. */
+  function redeemPoints(points: number): string | null {
+    try {
+      walletApi.redeemPoints(points, redeemable);
+      setWalletTxns(walletApi.list());
+      return null;
+    } catch (e) {
+      return e instanceof WalletError ? e.message : "We couldn't redeem your points. Please try again.";
+    }
+  }
+
+  // ---- Session: log out / delete account ----
+  /** Closes everything that belongs to the signed-in customer's current visit. */
+  function clearVisit() {
+    setCart([]);
+    setSubCart([]);
+    setCouponCode(null);
+    setCouponPicks([]);
+    setActive(null);
+    setViewer(null);
+    setMenuOpen(false);
+    setNotifOpen(false);
+    setOrderId(null);
+    setMosqueOrderId(null);
+    setJustPlaced(false);
+    setTab("home");
+  }
+
+  function logOut() {
+    authApi.signOut();
+    clearVisit();
+    setSession("out");
+    window.scrollTo({ top: 0 });
+  }
+
+  function deleteAccount() {
+    authApi.deleteAccount();
+    clearVisit();
+    setOrders([]);
+    setMosqueOrders([]);
+    setBooklets([]);
+    setWalletTxns([]);
+    setNotifications([]);
+    setSession("deleted");
+    window.scrollTo({ top: 0 });
+  }
+
+  function continueFromSignedOut() {
+    authApi.signIn();
+    if (session === "deleted") {
+      // A brand-new account: reload so every screen starts from a clean slate.
+      window.location.reload();
+      return;
+    }
+    loadAccountData();
+    setSession("in");
     window.scrollTo({ top: 0 });
   }
 
@@ -475,6 +616,10 @@ function App() {
     }
   }
 
+  if (session !== "in") {
+    return <SignedOutScreen status={session} onContinue={continueFromSignedOut} />;
+  }
+
   return (
     <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col overflow-x-clip bg-background">
       <header
@@ -482,7 +627,7 @@ function App() {
           headerHidden ? "-translate-y-full" : "translate-y-0"
         } ${headerElevated ? "shadow-[0_8px_24px_-14px_rgba(13,42,110,0.4)]" : "shadow-none"}`}
       >
-        {/* Left group: menu + search. Search opens the Shop screen; the cart now
+        {/* Left group: menu + cart. Search now lives inside the menu; the wallet
             lives in the bottom bar. */}
         <div className={`flex shrink-0 items-center gap-1.5 xs:gap-2 ${LOGO_ROW}`}>
           <button
@@ -497,13 +642,18 @@ function App() {
             )}
           </button>
           <button
-            aria-label="Search products"
-            onClick={() => goToShop()}
-            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full xs:h-8 xs:w-8 ${
-              tab === "shop" ? "bg-brand text-primary-foreground" : "bg-secondary text-brand"
+            aria-label="Cart"
+            onClick={() => setTab("cart")}
+            className={`relative grid h-7 w-7 shrink-0 place-items-center rounded-full xs:h-8 xs:w-8 ${
+              tab === "cart" ? "bg-brand text-primary-foreground" : "bg-secondary text-brand"
             }`}
           >
-            <Search className="h-3.5 w-3.5" />
+            <ShoppingBag className="h-3.5 w-3.5" />
+            {count > 0 && (
+              <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[9px] font-bold text-primary-foreground ring-2 ring-background">
+                {count}
+              </span>
+            )}
           </button>
         </div>
 
@@ -512,14 +662,15 @@ function App() {
         <img
           src={logo}
           alt="Abraaj Water"
-          className={`pointer-events-none absolute left-1/2 w-auto max-w-[42vw] -translate-x-1/2 object-contain transition-opacity duration-300 ${LOGO_SIZE} ${
+          className={`pointer-events-none absolute left-1/2 w-auto max-w-[42vw] -translate-x-1/2 object-contain dark:brightness-0 dark:invert transition-opacity duration-300 ${LOGO_SIZE} ${
             logoPhase === "done" ? "opacity-100" : "opacity-0"
           }`}
         />
 
-        {/* Right group: coins (loops coins ↔ KWD). Profile now lives in the bottom bar. */}
+        {/* Right group: points (loops points ↔ KWD). Profile now lives in the bottom bar. */}
         <div className="flex shrink-0 items-center gap-1.5 xs:gap-2">
-          <CoinChip coins={totalCoins} onClick={() => setTab("account")} />
+          <ThemeMenuButton />
+          <PointsChip points={totalPoints} onClick={() => openScreen("points")} />
         </div>
       </header>
 
@@ -613,7 +764,7 @@ function App() {
             setDuration={setDuration}
             setSchedule={setSchedule}
             pricing={pricing}
-            coins={totalCoins}
+            points={totalPoints}
             onShop={() => goToShop()}
             onSubscribe={() => setTab("plan")}
             onCheckout={() => openScreen("checkout")}
@@ -621,6 +772,9 @@ function App() {
             onApplyCoupon={applyCoupon}
             onRemoveCoupon={() => setCouponCode(null)}
             onBrowseCoupons={() => openCoupons("codes")}
+            orders={orders}
+            onOpenOrder={(id) => openOrder(id, "order")}
+            onViewHistory={() => openScreen("orders")}
             bookletCoupons={
               <CartBookletCoupons
                 available={usableCoupons.length}
@@ -703,12 +857,19 @@ function App() {
 
         {tab === "account" && (
           <AccountScreen
-            coins={totalCoins}
+            points={totalPoints}
+            walletKwd={walletKwd}
             orderCount={orders.length}
             couponsLeft={couponsLeft}
             onPlan={() => openSubscriptions()}
             onOrders={() => openScreen("orders")}
             onBooklets={() => openCoupons()}
+            onWallet={() => openScreen("wallet")}
+            onWalletHistory={() => openScreen("wallethistory")}
+            onPoints={() => openScreen("points")}
+            onPointsHistory={() => openScreen("pointshistory")}
+            onLogout={logOut}
+            onDeleteAccount={deleteAccount}
           />
         )}
 
@@ -719,6 +880,48 @@ function App() {
             onChanged={() => setOrders(ordersApi.list())}
             onBack={() => openScreen("account")}
             onSubscribe={() => setTab("plan")}
+          />
+        )}
+
+        {tab === "wallet" && (
+          <WalletScreen
+            balance={walletKwd}
+            txns={walletTxns}
+            pointsAvailable={redeemable}
+            onBack={() => openScreen("account")}
+            onTopUp={topUpWallet}
+            onHistory={() => openScreen("wallethistory")}
+            onPoints={() => openScreen("points")}
+          />
+        )}
+
+        {tab === "wallethistory" && (
+          <WalletHistoryScreen
+            txns={walletTxns}
+            balance={walletKwd}
+            onBack={() => openScreen("wallet")}
+            onAddMoney={() => openScreen("wallet")}
+          />
+        )}
+
+        {tab === "points" && (
+          <PointsScreen
+            available={redeemable}
+            pending={cartPoints}
+            events={pointsEvents(orders, walletTxns)}
+            onBack={() => openScreen("account")}
+            onRedeem={redeemPoints}
+            onHistory={() => openScreen("pointshistory")}
+            onWallet={() => openScreen("wallet")}
+          />
+        )}
+
+        {tab === "pointshistory" && (
+          <PointsHistoryScreen
+            events={pointsEvents(orders, walletTxns)}
+            available={redeemable}
+            onBack={() => openScreen("points")}
+            onShop={() => goToShop()}
           />
         )}
 
@@ -737,8 +940,8 @@ function App() {
             onPlace={setPlaceId}
             subLines={subCart}
             onSubscribe={addSub}
-            onBuyOnce={(p) => add(p)}
             onOpenSubCart={() => openScreen("subcart")}
+            onOpenOrders={() => openMosqueOrders()}
             onBack={() => openScreen("home")}
           />
         )}
@@ -752,13 +955,43 @@ function App() {
             onBrowse={() => openScreen("mosque")}
             onCheckout={() => openScreen("subcheckout")}
             onBack={() => openScreen("mosque")}
+            orders={mosqueOrders}
+            onOpenOrder={openMosqueOrder}
+            onViewHistory={() => openMosqueOrders("history")}
           />
         )}
+
+        {tab === "mosqueorders" && (
+          <MosqueOrdersScreen
+            orders={mosqueOrders}
+            tab={mosqueTab}
+            onTab={setMosqueTab}
+            onBack={() => openScreen("mosque")}
+            onOpen={openMosqueOrder}
+            onChanged={() => setMosqueOrders(mosqueOrdersApi.list())}
+            onBrowse={() => openScreen("mosque")}
+          />
+        )}
+
+        {tab === "mosquetrack" &&
+          (() => {
+            const mo = mosqueOrders.find((o) => o.id === mosqueOrderId);
+            return mo ? (
+              <MosqueTrackScreen
+                order={mo}
+                onBack={() => openMosqueOrders(mosqueTab)}
+                onChanged={() => setMosqueOrders(mosqueOrdersApi.list())}
+              />
+            ) : (
+              <OrderMissing onBack={() => openMosqueOrders()} />
+            );
+          })()}
 
         {tab === "subcheckout" && (
           <SubscriptionCheckoutScreen
             lines={subCart}
-            onConfirm={() => setSubCart([])}
+            onConfirm={placeMosqueOrder}
+            onTrack={openMosqueOrder}
             onBack={() => openScreen("subcart")}
             onHome={() => openScreen("home")}
             onMosque={() => openScreen("mosque")}
@@ -825,14 +1058,13 @@ function App() {
               </button>
             </li>
 
-            {/* Cart */}
+            {/* Wallet — opens the wallet page. (Cart now lives in the top navbar.) */}
             <li className="flex-1">
               <TabButton
-                active={tab === "cart"}
-                Icon={ShoppingBag}
-                label="Cart"
-                badge={count}
-                onClick={() => setTab("cart")}
+                active={tab === "wallet" || tab === "wallethistory"}
+                Icon={Wallet}
+                label="Wallet"
+                onClick={() => openScreen("wallet")}
               />
             </li>
 
@@ -886,6 +1118,8 @@ function App() {
           if (id === "about") openScreen("about");
           if (id === "help") setTab("account");
           if (id === "orders") openScreen("orders");
+          if (id === "wallet") openScreen("wallet");
+          if (id === "points") openScreen("points");
           if (id === "coupons") openCoupons();
         }}
       />
@@ -905,7 +1139,7 @@ function App() {
           src={logo}
           alt=""
           aria-hidden="true"
-          className={`pointer-events-none fixed z-50 w-auto object-contain transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          className={`pointer-events-none fixed z-50 w-auto object-contain dark:brightness-0 dark:invert transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
             logoPhase === "toHeader"
               ? `${HEADER_TOP} ${LOGO_SIZE} left-1/2 max-w-[42vw] -translate-x-1/2 translate-y-0 opacity-100 drop-shadow-none`
               : `top-1/2 left-1/2 h-[clamp(4.5rem,24vw,7rem)] max-w-[62vw] -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_10px_28px_rgba(15,58,138,0.35)] ${
@@ -1323,7 +1557,7 @@ function ProductSheet({
         <div className="mt-4 grid grid-cols-2 gap-2">
           {(
             [
-              ["once", "One time", `AED ${product.price}`],
+              ["once", "One time", formatPrice(product.price)],
               ["sub", "Subscribe", formatPrice(lineUnitPrice({ product, planId: planId }))],
             ] as const
           ).map(([key, label, price]) => (
@@ -1496,7 +1730,7 @@ function CartScreen({
   setDuration,
   setSchedule,
   pricing,
-  coins,
+  points,
   onShop,
   onSubscribe,
   onCheckout,
@@ -1505,13 +1739,16 @@ function CartScreen({
   onRemoveCoupon,
   onBrowseCoupons,
   bookletCoupons,
+  orders,
+  onOpenOrder,
+  onViewHistory,
 }: {
   cart: CartLine[];
   setQty: (i: number, d: number) => void;
   setDuration: (i: number, durationId: string) => void;
   setSchedule: (i: number, patch: { days?: Weekday[]; startDate?: string | undefined }) => void;
   pricing: ReturnType<typeof cartPricing>;
-  coins: number;
+  points: number;
   onShop: () => void;
   onSubscribe: () => void;
   onCheckout: () => void;
@@ -1521,8 +1758,28 @@ function CartScreen({
   onBrowseCoupons: () => void;
   /** "Pay with e-coupons" card. */
   bookletCoupons?: React.ReactNode;
+  /** Past orders, newest first (shown as history under the cart). */
+  orders: Order[];
+  onOpenOrder: (id: string) => void;
+  onViewHistory: () => void;
 }) {
-  const { subtotal, saving, delivery, total, coins: earnedCoins, couponDiscount, couponReason, bookletDiscount, couponsUsed } = pricing;
+  const history = (
+    <OrderHistoryPreview
+      heading="Order history"
+      rows={orders.map((o) => ({
+        id: o.id,
+        title: `Order ${o.id}`,
+        sub: `${formatDate(o.createdAt)} · ${o.items.reduce((n, i) => n + i.quantity, 0)} items`,
+        status: ORDER_STATUS_LABEL[o.status],
+        tone: o.status === "DELIVERED" || o.status === "COMPLETED" ? "done" : "brand",
+        total: formatPrice(o.pricing.total),
+      }))}
+      onOpen={onOpenOrder}
+      onViewAll={onViewHistory}
+      viewAllLabel="View all"
+    />
+  );
+  const { subtotal, saving, delivery, total, points: earnedPoints, couponDiscount, couponReason, bookletDiscount, couponsUsed } = pricing;
   if (cart.length === 0) {
     return (
       <section className="animate-rise pt-16 text-center">
@@ -1537,6 +1794,7 @@ function CartScreen({
         >
           Browse products
         </button>
+        <div className="text-left">{history}</div>
       </section>
     );
   }
@@ -1546,7 +1804,7 @@ function CartScreen({
       <div className="mt-1 flex items-center justify-between gap-2">
         <h1 className="text-f-xl font-extrabold tracking-tight text-foreground">Cart</h1>
         <span className="bg-aqua-soft flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-f-2xs font-bold text-brand">
-          <Coins className="h-3.5 w-3.5" /> {coins} coins
+          <Star className="h-3.5 w-3.5" /> {points} points
         </span>
       </div>
       <div className="mt-4 space-y-3">
@@ -1623,8 +1881,6 @@ function CartScreen({
         </button>
       </div>
 
-      {bookletCoupons}
-
       <CartCoupon
         appliedCode={couponCode}
         discount={couponDiscount}
@@ -1642,7 +1898,7 @@ function CartScreen({
         )}
         {couponDiscount > 0 && <Row label={`Coupon ${couponCode}`} value={`− ${formatPrice(couponDiscount)}`} accent />}
         <Row label="Delivery" value={delivery === 0 ? "Free" : formatPrice(delivery)} />
-        {earnedCoins > 0 && <Row label="Coins you'll earn" value={`+${earnedCoins}`} accent />}
+        {earnedPoints > 0 && <Row label="Points you'll earn" value={`+${earnedPoints}`} accent />}
         <div className="my-2 h-px bg-border" />
         <div className="flex items-center justify-between gap-2">
           <span className="font-bold text-foreground">Total</span>
@@ -1656,6 +1912,8 @@ function CartScreen({
       >
         Checkout
       </button>
+
+      {history}
     </section>
   );
 }
@@ -1718,20 +1976,41 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
 }
 
 function AccountScreen({
-  coins,
+  points,
+  walletKwd,
   orderCount,
   couponsLeft,
   onPlan,
   onOrders,
   onBooklets,
+  onWallet,
+  onWalletHistory,
+  onPoints,
+  onPointsHistory,
+  onLogout,
+  onDeleteAccount,
 }: {
-  coins: number;
+  points: number;
+  walletKwd: number;
   orderCount: number;
   couponsLeft: number;
   onPlan: () => void;
   onOrders: () => void;
   onBooklets: () => void;
+  onWallet: () => void;
+  onWalletHistory: () => void;
+  onPoints: () => void;
+  onPointsHistory: () => void;
+  onLogout: () => void;
+  onDeleteAccount: () => void;
 }) {
+  const handlers: Record<string, (() => void) | undefined> = {
+    "My subscriptions": onPlan,
+    "Order history": onOrders,
+    "E-coupon booklets": onBooklets,
+    "Wallet history": onWalletHistory,
+    "Points history": onPointsHistory,
+  };
   return (
     <section className="animate-rise">
       <h1 className="mt-1 text-f-xl font-extrabold tracking-tight text-foreground">Account</h1>
@@ -1745,46 +2024,64 @@ function AccountScreen({
         </div>
       </div>
 
-      <div className="card-soft mt-3 flex items-center gap-3 rounded-3xl p-3.5 xs:p-4">
-        <div className="bg-aqua-soft grid h-11 w-11 shrink-0 place-items-center rounded-full">
-          <Coins className="h-5 w-5 text-brand" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-f-sm font-bold text-foreground">{coins} coins</p>
-          <p className="truncate text-f-xs text-muted-foreground">Earned from your orders</p>
-        </div>
+      <div className="mt-3 grid grid-cols-2 gap-2.5 xs:gap-3">
+        <button
+          onClick={onWallet}
+          className="card-soft flex min-w-0 flex-col items-start gap-2 rounded-3xl p-3.5 text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none xs:p-4"
+        >
+          <span className="bg-aqua-soft grid h-10 w-10 shrink-0 place-items-center rounded-full">
+            <Wallet className="h-5 w-5 text-brand" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 max-w-full">
+            <span className="block truncate text-f-sm font-bold text-foreground">{formatPrice(walletKwd)}</span>
+            <span className="block truncate text-f-xs text-muted-foreground">Wallet balance</span>
+          </span>
+        </button>
+        <button
+          onClick={onPoints}
+          className="card-soft flex min-w-0 flex-col items-start gap-2 rounded-3xl p-3.5 text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none xs:p-4"
+        >
+          <span className="bg-aqua-soft grid h-10 w-10 shrink-0 place-items-center rounded-full">
+            <Star className="h-5 w-5 text-brand" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 max-w-full">
+            <span className="block truncate text-f-sm font-bold text-foreground">{points.toLocaleString("en-US")} points</span>
+            <span className="block truncate text-f-xs text-muted-foreground">Worth {formatPrice(pointsToKwd(points))}</span>
+          </span>
+        </button>
       </div>
 
       <div className="mt-4 space-y-2">
-        {["My subscriptions", "E-coupon booklets", "Delivery addresses", "Order history", "Payment methods", "Help & support"].map(
-          (item) => (
-            <button
-              key={item}
-              onClick={
-                item === "My subscriptions"
-                  ? onPlan
-                  : item === "Order history"
-                    ? onOrders
-                    : item === "E-coupon booklets"
-                      ? onBooklets
-                      : undefined
-              }
-              className="card-soft flex w-full items-center justify-between gap-2 rounded-2xl px-4 py-3.5 text-f-sm font-semibold text-foreground"
-            >
-              <span className="truncate">{item}</span>
-              <span className="flex shrink-0 items-center gap-2">
-                {item === "Order history" && orderCount > 0 && (
-                  <span className="bg-aqua-soft rounded-full px-2 py-0.5 text-f-2xs font-bold text-brand">{orderCount}</span>
-                )}
-                {item === "E-coupon booklets" && couponsLeft > 0 && (
-                  <span className="bg-aqua-soft rounded-full px-2 py-0.5 text-f-2xs font-bold text-brand">{couponsLeft} left</span>
-                )}
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </span>
-            </button>
-          ),
-        )}
+        {[
+          "My subscriptions",
+          "E-coupon booklets",
+          "Delivery addresses",
+          "Order history",
+          "Wallet history",
+          "Points history",
+          "Payment methods",
+          "Help & support",
+        ].map((item) => (
+          <button
+            key={item}
+            onClick={handlers[item]}
+            className="card-soft flex w-full items-center justify-between gap-2 rounded-2xl px-4 py-3.5 text-f-sm font-semibold text-foreground"
+          >
+            <span className="truncate">{item}</span>
+            <span className="flex shrink-0 items-center gap-2">
+              {item === "Order history" && orderCount > 0 && (
+                <span className="bg-aqua-soft rounded-full px-2 py-0.5 text-f-2xs font-bold text-brand">{orderCount}</span>
+              )}
+              {item === "E-coupon booklets" && couponsLeft > 0 && (
+                <span className="bg-aqua-soft rounded-full px-2 py-0.5 text-f-2xs font-bold text-brand">{couponsLeft} left</span>
+              )}
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </span>
+          </button>
+        ))}
       </div>
+
+      <AccountSessionActions walletBalance={walletKwd} points={points} onLogout={onLogout} onDelete={onDeleteAccount} />
     </section>
   );
 }

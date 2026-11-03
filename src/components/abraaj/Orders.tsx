@@ -424,7 +424,7 @@ export function OrderDetailsScreen({
           <SumRow label={`Coupon ${order.pricing.couponCode}`} value={`− ${formatPrice(order.pricing.couponDiscount)}`} accent />
         ) : null}
         <SumRow label="Delivery" value={order.pricing.delivery === 0 ? "Free" : formatPrice(order.pricing.delivery)} />
-        {order.coinsEarned > 0 && <SumRow label="Coins earned" value={`+${order.coinsEarned}`} accent />}
+        {order.pointsEarned > 0 && <SumRow label="Points earned" value={`+${order.pointsEarned}`} accent />}
         <div className="my-2 h-px bg-border" />
         <div className="flex items-center justify-between gap-2">
           <span className="font-bold text-foreground">Total</span>

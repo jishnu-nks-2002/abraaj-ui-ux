@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronRight, HelpCircle, Info, Package, Search, Star, Ticket, X } from "lucide-react";
+import { Award, Bell, ChevronRight, HelpCircle, Info, Package, Search, Star, Ticket, Wallet, X } from "lucide-react";
 import video1 from "@/assets/side-video-1.mp4";
 import video1Poster from "@/assets/video/video-1-poster.jpg";
 import video2 from "@/assets/p1-video-white.mp4";
 import logo from "@/assets/logo-2.png";
 import { APP_VERSION } from "@/lib/abraaj-data";
+import { ThemeSegmented } from "@/components/abraaj/ThemeToggle";
 
 const items = [
   // Search lives in the menu so it's the first, most reachable action in the list.
@@ -12,6 +13,8 @@ const items = [
   // Notifications moved here from the top navbar.
   { id: "notifications", label: "Notifications", Icon: Bell },
   { id: "orders", label: "My orders", Icon: Package },
+  { id: "wallet", label: "Wallet", Icon: Wallet },
+  { id: "points", label: "My points", Icon: Award },
   { id: "coupons", label: "E-coupon booklets", Icon: Ticket },
   { id: "about", label: "About Abraaj", Icon: Info },
   { id: "help", label: "Help & FAQs", Icon: HelpCircle },
@@ -166,6 +169,8 @@ export function Sidebar({
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           ))}
+
+          <ThemeSegmented />
 
           <p className="py-5 text-f-2xs text-muted-foreground">Version {APP_VERSION}</p>
         </nav>

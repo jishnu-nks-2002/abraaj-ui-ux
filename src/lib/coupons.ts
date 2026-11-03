@@ -12,15 +12,15 @@ export type Coupon = {
   id: string;
   code: string;
   kind: CouponKind;
-  /** Percent (0-100) for "percent", AED for "flat", ignored for "delivery". */
+  /** Percent (0-100) for "percent", KWD for "flat", ignored for "delivery". */
   value: number;
-  /** Largest discount a percentage coupon can give, in AED. */
+  /** Largest discount a percentage coupon can give, in KWD. */
   maxOff?: number;
-  /** Minimum amount of eligible items in the cart, in AED. */
+  /** Minimum amount of eligible items in the cart, in KWD. */
   minSpend: number;
   title: string;
   description: string;
-  /** Short big label shown on the ticket stub, e.g. "10%" / "AED 5" / "FREE". */
+  /** Short big label shown on the ticket stub, e.g. "10%" / "KWD 0.500" / "FREE". */
   stub: string;
   stubSub: string;
   /** Who it applies to. Omit a field = no restriction on that axis. */
@@ -58,8 +58,8 @@ export type CouponEvaluation =
   | { ok: true; discount: number }
   | { ok: false; discount: 0; reason: string };
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-const money = (n: number) => `AED ${Number.isInteger(round2(n)) ? round2(n) : round2(n).toFixed(2)}`;
+const round2 = (n: number) => Math.round(n * 1000) / 1000;
+const money = (n: number) => `KWD ${round2(n).toFixed(3)}`;
 
 export function couponMatchesLine(c: Coupon, l: CouponLine) {
   const s = c.scope;

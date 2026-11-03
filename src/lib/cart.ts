@@ -23,20 +23,21 @@ export type CartLine = {
   startDate?: string | undefined;
 };
 
-export const CURRENCY = "AED";
+export const CURRENCY = "KWD";
 /** Subscription discount on the list price (matches the product sheet's "Subscribe" price). */
 export const CART_SUB_OFF = 10;
-export const FREE_DELIVERY_OVER = 50;
-export const DELIVERY_FEE = 5;
+export const FREE_DELIVERY_OVER = 4;
+export const DELIVERY_FEE = 0.5;
 /** One-time orders arrive within this many days. */
 export const ONE_TIME_DELIVERY_DAYS = 1;
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+// Kuwaiti dinar has 3 decimal places (1 KWD = 1,000 fils).
+const round2 = (n: number) => Math.round(n * 1000) / 1000;
 
-/** "AED 12" for whole amounts, "AED 10.80" otherwise. */
+/** Always 3 decimals, the KWD convention: "KWD 1.000", "KWD 0.675", "KWD 17.500". */
 export function formatPrice(n: number) {
   const r = round2(n);
-  return `${CURRENCY} ${Number.isInteger(r) ? r.toLocaleString("en-US") : r.toFixed(2)}`;
+  return `${CURRENCY} ${r.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
 }
 
 export function isSubscription(l: Pick<CartLine, "planId">) {
@@ -122,8 +123,8 @@ export function cartPricing(lines: CartLine[], coupon?: Coupon | null, bookletCo
   const couponDiscount = evaluation?.ok ? evaluation.discount : 0;
   const couponReason = evaluation && !evaluation.ok ? evaluation.reason : null;
 
-  // Gallons paid with e-coupons already earned their coins when the booklet was bought.
-  const coins = lines.reduce((n, l) => n + l.qty * l.product.coins, 0) - couponsUsed * (gallonLine?.product.coins ?? 0);
+  // Gallons paid with e-coupons already earned their points when the booklet was bought.
+  const points = lines.reduce((n, l) => n + l.qty * l.product.points, 0) - couponsUsed * (gallonLine?.product.points ?? 0);
 
   return {
     count: lines.reduce((n, l) => n + l.qty, 0),
@@ -137,6 +138,6 @@ export function cartPricing(lines: CartLine[], coupon?: Coupon | null, bookletCo
     couponsUsed,
     bookletDiscount,
     total: round2(Math.max(0, itemsTotal + delivery - couponDiscount - bookletDiscount)),
-    coins,
+    points,
   };
 }

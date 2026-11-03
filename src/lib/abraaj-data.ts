@@ -25,8 +25,8 @@ export type Product = {
   category: "Bottles" | "Gallons" | "Alkaline" | "Essentials" | "Booklets";
   image: string;
   blurb: string;
-  /** Coins earned when this product is added to the cart (loyalty rewards). */
-  coins: number;
+  /** Points earned when this product is ordered (loyalty rewards). */
+  points: number;
   /** Digital products are issued instantly at checkout: no delivery, no delivery fee. */
   digital?: boolean;
   /** Set on e-coupon booklets: what the booklet contains. */
@@ -52,99 +52,99 @@ export const products: Product[] = [
     name: "Abraaj 5 Gallon",
     size: "18.9 L",
     pack: "Single bottle",
-    price: 12,
+    price: 1,
     category: "Gallons",
     image: p5gal,
     blurb: "Home and office dispenser bottle, sealed and delivered fresh.",
-    coins: 60,
+    points: 60,
   },
   {
     id: "gal5x2",
     name: "Abraaj 5 Gallon",
     size: "18.9 L",
     pack: "Pack of 2",
-    price: 23,
+    price: 1.9,
     category: "Gallons",
     image: p5gal,
     blurb: "Two sealed dispenser bottles, delivered together and always in stock.",
-    coins: 120,
+    points: 120,
   },
   {
     id: "ml500",
     name: "Abraaj 500 ml",
     size: "500 ml",
     pack: "Pack of 24",
-    price: 9,
+    price: 0.75,
     category: "Bottles",
     image: p500,
     blurb: "The everyday bottle for desks, cars and gym bags.",
-    coins: 45,
+    points: 45,
   },
   {
     id: "l15",
     name: "Abraaj 1.5 Litre",
     size: "1.5 L",
     pack: "Pack of 6",
-    price: 11,
+    price: 0.9,
     category: "Bottles",
     image: p1500,
     blurb: "Family size bottle for the dinner table and long days out.",
-    coins: 55,
+    points: 55,
   },
   {
     id: "alk330",
     name: "Abraaj Alkaline 330 ml",
     size: "330 ml",
     pack: "Pack of 24",
-    price: 18,
+    price: 1.5,
     category: "Alkaline",
     image: palk,
     blurb: "Balanced pH 8+ alkaline water in a compact bottle.",
-    coins: 90,
+    points: 90,
   },
   {
     id: "ml330",
     name: "Abraaj 330 ml",
     size: "330 ml",
     pack: "Pack of 24",
-    price: 8,
+    price: 0.65,
     category: "Bottles",
     image: p330,
     blurb: "Small, light and perfect for meetings and events.",
-    coins: 40,
+    points: 40,
   },
   {
     id: "ml200",
     name: "Abraaj 200 ml",
     size: "200 ml",
     pack: "Pack of 48",
-    price: 14,
+    price: 1.2,
     category: "Bottles",
     image: p200,
     blurb: "Mini bottles for kids, cafes and hospitality trays.",
-    coins: 70,
+    points: 70,
   },
   {
     id: "tissue",
     name: "Abraaj Facial Tissue",
     size: "150 x 2 ply",
     pack: "Single box",
-    price: 4,
+    price: 0.35,
     category: "Essentials",
     image: ptissue,
     blurb: "Soft everyday tissues to add to your water delivery.",
-    coins: 20,
+    points: 20,
   },
   {
     id: "tissue10",
     name: "Abraaj Facial Tissue",
     size: "150 x 2 ply",
     pack: "Box of 10",
-    price: 30,
+    price: 2.5,
     category: "Essentials",
     image: ptissue,
     blurb: "A box of 10 soft everyday tissue packs, the better value for the home or office.",
-    coins: 150,
+    points: 150,
   },
 ];
 
@@ -155,7 +155,7 @@ export const categories = ["All", "Bottles", "Gallons", "Alkaline", "Essentials"
 /* ------------------------------------------------------------------ */
 /*
  * Booklets are ordinary catalogue products (so the cart, checkout, orders and
- * coins all work unchanged), kept out of `products` so they don't appear in the
+ * points all work unchanged), kept out of `products` so they don't appear in the
  * shop grid. Each coupon inside pays for one 5 Gallon bottle.
  *
  * There is only one booklet now: the 20-coupon Family booklet.
@@ -181,21 +181,21 @@ function bookletArt(count: number, cover: BookletSpec["cover"]) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-const bookletSpecs: (BookletSpec & { id: string; price: number; coins: number })[] = [
+const bookletSpecs: (BookletSpec & { id: string; price: number; points: number })[] = [
   {
     id: "bk20",
     label: "Family",
     coupons: 20,
     redeemsFor: GALLON_ID,
     validityMonths: 12,
-    price: 210,
-    coins: 650,
+    price: 17.5,
+    points: 650,
     cover: { from: "#1c2f86", to: "#2f8fd6", foil: "#e9c46a" },
     tag: "Most popular",
   },
 ];
 
-export const bookletProducts: Product[] = bookletSpecs.map(({ id, price, coins, ...spec }) => ({
+export const bookletProducts: Product[] = bookletSpecs.map(({ id, price, points, ...spec }) => ({
   id,
   name: `${spec.label} gallon booklet`,
   size: `${spec.coupons} coupons`,
@@ -204,7 +204,7 @@ export const bookletProducts: Product[] = bookletSpecs.map(({ id, price, coins, 
   category: "Booklets",
   image: bookletArt(spec.coupons, spec.cover),
   blurb: `${spec.coupons} e-coupons, each good for one Abraaj 5 Gallon bottle.`,
-  coins,
+  points,
   digital: true,
   booklet: spec,
 }));
@@ -264,11 +264,12 @@ export const DEAL_OFF = 10;
 /** Percentage knocked off the list price when the customer subscribes. */
 export const SUB_OFF = 15;
 
-/** Coins already earned from past orders, shown before anything is in the cart. */
-export const BASE_COINS = 480;
+/** Points already earned from past orders, shown before anything is in the cart. */
+export const BASE_POINTS = 480;
 
 export function money(n: number) {
-  return (Math.round(n * 100) / 100).toFixed(2);
+  // Kuwaiti dinar has 3 decimal places (1 KWD = 1,000 fils).
+  return (Math.round(n * 1000) / 1000).toFixed(3);
 }
 
 export function dealPrices(price: number) {
@@ -328,7 +329,7 @@ export const heroSlides: HeroSlide[] = [
   },
   {
     badge: "Free delivery",
-    title: "Free delivery over AED 50",
+    title: "Free delivery over KWD 4",
     subtitle: "Same-day drop-off across Dubai.",
     ctaLabel: "Shop now",
     image: banner1,

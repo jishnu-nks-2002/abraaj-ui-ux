@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Coins, Info } from "lucide-react";
+import { ChevronRight, Info, Star } from "lucide-react";
 import {
   DEAL_OFF,
   byId,
@@ -252,9 +252,9 @@ export function DealCard({
           {product.pack}
         </p>
 
-        {/* Coins earned */}
+        {/* Points earned */}
         <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-aqua-soft px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-aqua">
-          <Coins className="h-3 w-3 shrink-0" />+{product.coins} coins
+          <Star className="h-3 w-3 shrink-0" />+{product.points} points
         </span>
       </button>
 
@@ -294,7 +294,7 @@ export function DealCard({
             </span>
 
             <span className="text-f-xs font-extrabold text-foreground">
-              AED {money(oneTime)}
+              KWD {money(oneTime)}
             </span>
           </span>
         </button>
@@ -332,7 +332,7 @@ export function DealCard({
 
           {/* Subscription price */}
           <span className="shrink-0 text-f-xs font-extrabold text-brand">
-            AED {money(sub)}
+            KWD {money(sub)}
           </span>
         </button>
       </div>

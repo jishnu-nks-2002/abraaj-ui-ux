@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, MapPin, Navigation, Plus, Repeat, Search, ShoppingBag, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Check, ChevronLeft, ChevronRight, MapPin, Navigation, Package, Plus, Repeat, Search, ShoppingBag, ShoppingCart, X } from "lucide-react";
 import { MosqueIcon } from "@/components/abraaj/HomeCategories";
-import { money, plans, type Product } from "@/lib/abraaj-data";
+import { byId, money, plans, type Product } from "@/lib/abraaj-data";
 import {
   DEFAULT_SUB_PLAN,
+  PLAN_ONCE,
   GOV_LABEL,
   PLAN_OFF,
   TYPE_LABEL,
@@ -23,6 +25,9 @@ import {
 } from "@/lib/mosque-data";
 
 const PAGE = 20;
+/** Products shown before any place is chosen: every product the places accept, in display order. */
+const ALL_PRODUCT_IDS = ["gal5", "ml500", "ml330", "ml200", "tissue"];
+const DEFAULT_PRODUCTS = ALL_PRODUCT_IDS.map(byId).filter(Boolean) as Product[];
 const TYPE_COUNT = Object.fromEntries(TYPE_ORDER.map((t) => [t, places.filter((p) => p.type === t).length])) as Record<
   PlaceType,
   number
@@ -33,32 +38,51 @@ export function MosqueScreen({
   onPlace,
   subLines,
   onSubscribe,
-  onBuyOnce,
   onOpenSubCart,
+  onOpenOrders,
   onBack,
 }: {
   placeId: string | null;
   onPlace: (id: string) => void;
   subLines: SubLine[];
-  /** Adds to the SUBSCRIPTION cart (never the normal cart). */
+  /** Adds to the MOSQUE cart (never the personal cart). `planId` is a frequency or "once". */
   onSubscribe: (product: Product, placeId: string, planId: string) => void;
-  /** Adds a one-off purchase to the NORMAL cart, exactly like the Shop "+" button. */
-  onBuyOnce: (product: Product) => void;
   onOpenSubCart: () => void;
+  /** Orders, live tracking, subscriptions and history for the mosque cart. */
+  onOpenOrders: () => void;
   onBack: () => void;
 }) {
   const place = placeById(placeId);
-  const list = place ? placeProducts(place) : [];
+  const list = place ? placeProducts(place) : DEFAULT_PRODUCTS;
   const totals = subTotals(subLines);
 
-  // The picker is open until a place is chosen; "Change" re-opens it.
-  const [picking, setPicking] = useState(!place);
+  // The area picker is a sheet: it opens when the customer taps Subscribe before an area is
+  // chosen (or taps "Change"), and closes once a place is picked.
+  const [picking, setPicking] = useState(false);
 
   const [query, setQuery] = useState("");
   const [area, setArea] = useState<string | null>(null);
   const [gov, setGov] = useState<string | null>(null);
   const [type, setType] = useState<PlaceType | null>(null);
   const [limit, setLimit] = useState(PAGE);
+  // The product the customer tapped Subscribe on while no area was chosen. It is added to the
+  // subscription cart as soon as they pick an area in the sheet.
+  const [pendingAdd, setPendingAdd] = useState<{ productId: string; planId: string } | null>(null);
+  const pendingProduct = pendingAdd ? byId(pendingAdd.productId) : undefined;
+
+  useEffect(() => {
+    if (!picking) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [picking]);
+
+  function closeSheet() {
+    setPicking(false);
+    setPendingAdd(null);
+  }
 
   useEffect(() => setLimit(PAGE), [query, area, gov, type]);
 
@@ -76,6 +100,10 @@ export function MosqueScreen({
   function choose(p: Place) {
     onPlace(p.id);
     setPicking(false);
+    if (pendingAdd && pendingProduct && p.productIds.includes(pendingAdd.productId)) {
+      onSubscribe(pendingProduct, p.id, pendingAdd.planId);
+    }
+    setPendingAdd(null);
   }
 
   function clearAll() {
@@ -94,28 +122,72 @@ export function MosqueScreen({
         >
           <ChevronLeft className="h-4 w-4" /> Home
         </button>
-        <button
-          onClick={onOpenSubCart}
-          aria-label="Subscription cart"
-          className="relative flex h-9 items-center gap-1.5 rounded-full bg-secondary px-3 text-f-2xs font-bold text-brand xs:h-10"
-        >
-          <Repeat className="h-4 w-4 shrink-0" />
-          <span className="whitespace-nowrap">Subscriptions</span>
-          {totals.count > 0 && (
-            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-primary-foreground">
-              {totals.count}
-            </span>
-          )}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onOpenOrders}
+            aria-label="Orders, tracking and history"
+            className="flex h-9 items-center gap-1.5 rounded-full bg-secondary px-3 text-f-2xs font-bold text-brand xs:h-10"
+          >
+            <Package className="h-4 w-4 shrink-0" />
+            <span className="whitespace-nowrap">Orders</span>
+          </button>
+          <button
+            onClick={onOpenSubCart}
+            aria-label="Mosque cart"
+            className="relative flex h-9 items-center gap-1.5 rounded-full bg-secondary px-3 text-f-2xs font-bold text-brand xs:h-10"
+          >
+            <ShoppingCart className="h-4 w-4 shrink-0" />
+            <span className="whitespace-nowrap">Mosque cart</span>
+            {totals.count > 0 && (
+              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-primary-foreground">
+                {totals.count}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       <h1 className="mt-3 text-f-xl font-extrabold tracking-tight text-foreground">Mosque & community</h1>
       <p className="mt-1 text-f-sm text-muted-foreground">
-        Find a place by area, then subscribe to regular deliveries.
+        Add what you need, then choose the place. Your mosque cart is separate from your personal cart.
       </p>
 
+      {/* ------------------------------ Products (first) ------------------------------ */}
+      <div key={place?.id ?? "all"} className="animate-rise">
+        <div className="mt-5 flex items-end justify-between gap-2">
+          <h2 className="text-f-lg font-bold text-foreground">{place ? "Needed here" : "Choose products"}</h2>
+          <span className="text-f-xs text-muted-foreground">{list.length} products</span>
+        </div>
+        <div className="mt-3 space-y-4">
+          {list.map((p) => (
+            <PlaceProductCard
+              key={p.id}
+              product={p}
+              inSub={
+                place
+                  ? subLines.filter((l) => l.placeId === place.id && l.product.id === p.id).reduce((n, l) => n + l.qty, 0)
+                  : 0
+              }
+              onSubscribe={(planId) => {
+                if (place) {
+                  onSubscribe(p, place.id, planId);
+                  return true;
+                }
+                // No area yet: ask for it right now, then add this product.
+                setPendingAdd({ productId: p.id, planId });
+                setPicking(true);
+                return false;
+              }}
+            />
+          ))}
+        </div>
+        {place && (
+          <p className="bg-aqua-soft mt-3 rounded-2xl px-3.5 py-2.5 text-f-xs text-foreground">{place.note}</p>
+        )}
+      </div>
+
       {/* ------------------------------ Selected place ------------------------------ */}
-      {place && !picking && (
+      {place && (
         <div className="mt-4 flex items-center gap-2.5 rounded-2xl bg-secondary px-4 py-3">
           <MapPin className="h-4 w-4 shrink-0 text-brand" />
           <div className="min-w-0 flex-1">
@@ -146,8 +218,36 @@ export function MosqueScreen({
       )}
 
       {/* ------------------------------ Picker ------------------------------ */}
-      {picking && (
-        <div className="mt-4">
+      {picking &&
+        typeof document !== "undefined" &&
+        createPortal(
+        <div className="fixed inset-0 z-[60] flex items-end justify-center">
+          <button aria-label="Close" onClick={closeSheet} className="animate-fade absolute inset-0 bg-foreground/45" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose your area"
+            className="animate-rise relative flex max-h-[88dvh] w-full max-w-md flex-col rounded-t-3xl bg-background shadow-[0_-20px_60px_rgba(4,20,60,0.35)]"
+          >
+            <div className="flex items-start justify-between gap-3 px-4 pt-4 pb-3">
+              <div className="min-w-0">
+                <h2 className="text-f-lg font-extrabold text-foreground">Choose your area</h2>
+                <p className="mt-0.5 text-f-xs text-muted-foreground">
+                  {pendingProduct
+                    ? `Where should we deliver ${pendingProduct.name}?`
+                    : "Pick the place for your deliveries."}
+                </p>
+              </div>
+              <button
+                onClick={closeSheet}
+                aria-label="Close"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-brand"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="no-scrollbar overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <div className="mt-1">
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-brand" />
             <input
@@ -287,31 +387,10 @@ export function MosqueScreen({
             </button>
           )}
         </div>
-      )}
-
-      {/* ------------------------------ Products ------------------------------ */}
-      {place && !picking && (
-        <div key={place.id} className="animate-rise">
-          <p className="bg-aqua-soft mt-3 rounded-2xl px-3.5 py-2.5 text-f-xs text-foreground">{place.note}</p>
-
-          <div className="mt-5 flex items-end justify-between gap-2">
-            <h2 className="text-f-base font-bold text-foreground">Needed here</h2>
-            <span className="text-f-2xs text-muted-foreground">{list.length} products</span>
+            </div>
           </div>
-          <div className="mt-3 space-y-3">
-            {list.map((p) => (
-              <PlaceProductCard
-                key={p.id}
-                product={p}
-                inSub={subLines
-                  .filter((l) => l.placeId === place.id && l.product.id === p.id)
-                  .reduce((n, l) => n + l.qty, 0)}
-                onSubscribe={(planId) => onSubscribe(p, place.id, planId)}
-                onBuyOnce={() => onBuyOnce(p)}
-              />
-            ))}
-          </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Sticky summary sits just above the promo bar + tab bar. */}
@@ -322,12 +401,12 @@ export function MosqueScreen({
             className="animate-rise flex w-full items-center gap-3 rounded-2xl bg-brand px-4 py-3 text-left text-primary-foreground shadow-[0_14px_30px_-12px_rgba(13,42,110,0.7)]"
           >
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/15">
-              <Repeat className="h-4 w-4" />
+              <ShoppingCart className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-f-sm font-bold">Subscription cart · {totals.count}</span>
+              <span className="block text-f-sm font-bold">Mosque cart · {totals.count}</span>
               <span className="block truncate text-f-2xs text-primary-foreground/80">
-                AED {money(totals.perDelivery)} per delivery round
+                KWD {money(totals.perDelivery)} per delivery round
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0" />
@@ -370,12 +449,11 @@ function PlaceProductCard({
   product,
   inSub,
   onSubscribe,
-  onBuyOnce,
 }: {
   product: Product;
   inSub: number;
-  onSubscribe: (planId: string) => void;
-  onBuyOnce: () => void;
+  /** Returns true when the product was added right away (false while an area still has to be picked). */
+  onSubscribe: (planId: string) => boolean;
 }) {
   const [planId, setPlanId] = useState(DEFAULT_SUB_PLAN);
   const [flash, setFlash] = useState<"sub" | "once" | null>(null);
@@ -389,32 +467,32 @@ function PlaceProductCard({
   const price = subUnitPrice(product.price, planId);
 
   return (
-    <div className="card-soft rounded-2xl p-3">
-      <div className="flex items-start gap-3">
-        <div className="grid h-20 w-20 shrink-0 place-items-center rounded-xl">
-          <img src={product.image} alt={product.name} className="max-h-[88%] w-auto object-contain" />
+    <div className="card-soft rounded-3xl p-4">
+      <div className="flex items-start gap-4">
+        <div className="grid h-32 w-32 shrink-0 place-items-center rounded-2xl xs:h-36 xs:w-36">
+          <img src={product.image} alt={product.name} className="max-h-[94%] w-auto object-contain" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-f-sm leading-snug font-bold text-foreground">{product.name}</p>
-          <p className="truncate text-f-2xs text-muted-foreground">
+          <p className="text-f-lg leading-snug font-bold text-foreground">{product.name}</p>
+          <p className="truncate text-f-sm text-muted-foreground">
             {product.size} · {product.pack}
           </p>
           <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2">
-            <span className="text-f-base font-extrabold text-brand">AED {money(price)}</span>
-            <span className="text-f-2xs text-muted-foreground line-through">AED {money(product.price)}</span>
+            <span className="text-f-lg font-extrabold text-brand">KWD {money(price)}</span>
+            <span className="text-f-sm text-muted-foreground line-through">KWD {money(product.price)}</span>
           </div>
-          <p className="text-f-2xs font-semibold text-aqua">Save {PLAN_OFF[planId]}% per delivery</p>
+          <p className="text-f-sm font-semibold text-aqua">Save {PLAN_OFF[planId]}% per delivery</p>
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Delivery frequency">
+      <div className="mt-4 grid grid-cols-3 gap-2" role="radiogroup" aria-label="Delivery frequency">
         {plans.map((p) => (
           <button
             key={p.id}
             role="radio"
             aria-checked={planId === p.id}
             onClick={() => setPlanId(p.id)}
-            className={`min-w-0 truncate rounded-xl px-1.5 py-2 text-center text-f-2xs font-semibold transition-colors ${
+            className={`min-w-0 truncate rounded-xl px-1.5 py-2.5 text-center text-f-xs font-semibold transition-colors ${
               planId === p.id ? "bg-brand text-primary-foreground" : "bg-secondary text-muted-foreground"
             }`}
           >
@@ -423,16 +501,15 @@ function PlaceProductCard({
         ))}
       </div>
 
-      <div className="mt-2.5 flex items-center gap-2">
+      <div className="mt-3 flex items-center gap-2">
         <button
           onClick={() => {
-            onSubscribe(planId);
-            setFlash("sub");
+            if (onSubscribe(planId)) setFlash("sub");
           }}
-          className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand py-2.5 text-f-xs font-bold text-primary-foreground transition-transform active:scale-[0.98]"
+          className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand py-3.5 text-f-sm font-bold text-primary-foreground transition-transform active:scale-[0.98]"
         >
           {flash === "sub" ? <Check className="h-4 w-4 shrink-0" /> : <Repeat className="h-4 w-4 shrink-0" />}
-          <span className="truncate">{flash === "sub" ? "Added to subscriptions" : "Subscribe"}</span>
+          <span className="truncate">{flash === "sub" ? "Subscribed" : "Subscribe"}</span>
           {inSub > 0 && flash !== "sub" && (
             <span className="grid h-5 min-w-5 place-items-center rounded-full bg-white/20 px-1 text-[10px] font-bold">
               {inSub}
@@ -441,14 +518,13 @@ function PlaceProductCard({
         </button>
         <button
           onClick={() => {
-            onBuyOnce();
-            setFlash("once");
+            if (onSubscribe(PLAN_ONCE)) setFlash("once");
           }}
-          aria-label={`Buy ${product.name} once`}
-          className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-background px-3 py-2.5 text-f-xs font-bold text-foreground"
+          aria-label={`Add ${product.name} once to the mosque cart`}
+          className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-background px-3.5 py-3.5 text-f-sm font-bold text-foreground"
         >
           {flash === "once" ? <Check className="h-4 w-4 text-aqua" /> : <ShoppingBag className="h-4 w-4" />}
-          <span className="hidden xs:inline">{flash === "once" ? "In cart" : "Buy once"}</span>
+          <span className="hidden xs:inline">{flash === "once" ? "In cart" : "Once"}</span>
           {flash !== "once" && <Plus className="h-3 w-3 xs:hidden" />}
         </button>
       </div>

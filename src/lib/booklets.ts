@@ -112,13 +112,13 @@ export function bookletProduct(b: Pick<Booklet, "productId">): Product | undefin
 
 /** Price the customer effectively paid per gallon with this booklet. */
 export function pricePerCoupon(p: Product) {
-  return p.booklet ? Math.round((p.price / p.booklet.coupons) * 100) / 100 : p.price;
+  return p.booklet ? Math.round((p.price / p.booklet.coupons) * 1000) / 1000 : p.price;
 }
 
 /** How much a booklet saves against buying every gallon at list price. */
 export function bookletSaving(p: Product) {
   const gallon = byId(p.booklet?.redeemsFor ?? GALLON_ID);
-  return p.booklet && gallon ? Math.round((gallon.price * p.booklet.coupons - p.price) * 100) / 100 : 0;
+  return p.booklet && gallon ? Math.round((gallon.price * p.booklet.coupons - p.price) * 1000) / 1000 : 0;
 }
 
 /** Every coupon that can be used right now, soonest-expiring first. */
@@ -218,8 +218,8 @@ function buildBooklet(
 
 // Bumped to v2 so browsers that already saved the old two-booklet demo data
 // (Family + Starter) start fresh with the single 20-coupon booklet.
-const BOOKLETS_KEY = "abraaj.booklets.v2";
-const SERIAL_KEY = "abraaj.bookletSerial.v2";
+const BOOKLETS_KEY = "abraaj.booklets.v3";
+const SERIAL_KEY = "abraaj.bookletSerial.v3";
 const FIRST_SERIAL = 52001;
 
 /**

@@ -48,7 +48,7 @@ import { BackLink } from "@/components/abraaj/order-ui";
 type Cover = BookletSpec["cover"];
 const FALLBACK_COVER: Cover = { from: "#1c2f86", to: "#2f8fd6", foil: "#e9c46a" };
 const coverFor = (productId: string) => bookletProduct({ productId })?.booklet?.cover ?? FALLBACK_COVER;
-const gallonPrice = () => byId(GALLON_ID)?.price ?? 12;
+const gallonPrice = () => byId(GALLON_ID)?.price ?? 1;
 const pad2 = (n: number) => String(n).padStart(2, "0");
 /** "14 Oct" */
 const shortDate = (iso: string) => formatDate(iso).replace(/ \d{4}$/, "");
@@ -483,7 +483,7 @@ function TermsPage({ b, now, folio }: PageCtx & { folio: number }) {
     "A redeemed coupon can't be used again.",
     `Unused coupons expire with the booklet on ${formatDate(b.expiresAt)} and can't be extended or refunded.`,
     "Coupons can't be exchanged for cash, other products or subscriptions.",
-    "Delivery follows the usual rule: free on orders over AED 50.",
+    "Delivery follows the usual rule: free on orders over KWD 4.",
   ];
   return (
     <PageFrame title="How to use" right={bookletIsExpired(b, now) ? "Expired" : undefined} folio={folio}>
@@ -999,7 +999,7 @@ function CouponSheet({
     ["Booklet", `${booklet.label} · Nº ${booklet.id}`],
     ["Coupon", `${coupon.number} of ${booklet.couponCount}`],
     ["Pays for", `1 × ${gallon?.name ?? "5 Gallon"} (${gallon?.size ?? "18.9 L"})`],
-    ["Value", formatPrice(gallon?.price ?? 12)],
+    ["Value", formatPrice(gallon?.price ?? 1)],
   ];
   if (status === "REDEEMED") {
     rows.push(["Redeemed", coupon.redeemedAt ? formatDateTime(coupon.redeemedAt) : "Yes"]);

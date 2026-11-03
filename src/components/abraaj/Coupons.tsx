@@ -97,7 +97,7 @@ export function CouponTicket({
           <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Applicable prices">
             {coupon.kind === "delivery" ? (
               <li className="bg-secondary rounded-lg px-2 py-1 text-f-2xs font-semibold text-foreground">
-                Delivery <s className="text-muted-foreground">AED 5</s> <b className="text-brand">Free</b>
+                Delivery <s className="text-muted-foreground">KWD 0.500</s> <b className="text-brand">Free</b>
               </li>
             ) : (
               items.map((p) => (

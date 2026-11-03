@@ -477,7 +477,7 @@ export function CheckoutScreen({
               <SumRow label={`Coupon ${pricing.appliedCoupon.code}`} value={`− ${formatPrice(pricing.couponDiscount)}`} accent />
             )}
             <SumRow label="Delivery" value={pricing.delivery === 0 ? "Free" : formatPrice(pricing.delivery)} />
-            {pricing.coins > 0 && <SumRow label="Coins you'll earn" value={`+${pricing.coins}`} accent />}
+            {pricing.points > 0 && <SumRow label="Points you'll earn" value={`+${pricing.points}`} accent />}
             <div className="my-2 h-px bg-border" />
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-foreground">Total</span>

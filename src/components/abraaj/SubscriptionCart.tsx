@@ -12,13 +12,18 @@ import {
   Repeat,
   Smartphone,
   Trash2,
+  Truck,
 } from "lucide-react";
 import { money, plans } from "@/lib/abraaj-data";
+import { OrderHistoryPreview, mosqueHistoryRows } from "@/components/abraaj/MosqueOrders";
+import type { MosqueOrder } from "@/lib/mosque-orders";
 import {
   PLAN_OFF,
+  PLAN_ONCE,
   deliverySlots,
   placeById,
-  planLabel,
+  planEvery,
+  planName,
   subLineKey,
   subTotals,
   subUnitPrice,
@@ -56,6 +61,8 @@ function groupByPlace(lines: SubLine[]) {
   return [...map.entries()].map(([placeId, items]) => ({ place: placeById(placeId), placeId, items }));
 }
 
+const PLAN_CHOICES = [...plans.map((p) => ({ id: p.id, name: p.name })), { id: PLAN_ONCE, name: "Once" }];
+
 function formatDay(d: Date) {
   return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
@@ -72,6 +79,9 @@ export function SubscriptionCartScreen({
   onBrowse,
   onCheckout,
   onBack,
+  orders,
+  onOpenOrder,
+  onViewHistory,
 }: {
   lines: SubLine[];
   setQty: (key: string, delta: number) => void;
@@ -80,9 +90,22 @@ export function SubscriptionCartScreen({
   onBrowse: () => void;
   onCheckout: () => void;
   onBack: () => void;
+  /** Past mosque orders, newest first (shown as history under the cart). */
+  orders: MosqueOrder[];
+  onOpenOrder: (orderId: string) => void;
+  onViewHistory: () => void;
 }) {
   const totals = subTotals(lines);
   const groups = groupByPlace(lines);
+  const history = (
+    <OrderHistoryPreview
+      heading="Mosque order history"
+      rows={mosqueHistoryRows(orders)}
+      onOpen={onOpenOrder}
+      onViewAll={onViewHistory}
+      viewAllLabel="Track & history"
+    />
+  );
 
   if (lines.length === 0) {
     return (
@@ -92,9 +115,9 @@ export function SubscriptionCartScreen({
           <div className="bg-aqua-soft mx-auto grid h-20 w-20 place-items-center rounded-full">
             <Repeat className="h-8 w-8 text-brand" />
           </div>
-          <h2 className="mt-4 text-f-lg font-bold text-foreground">No subscriptions yet</h2>
+          <h2 className="mt-4 text-f-lg font-bold text-foreground">Your mosque cart is empty</h2>
           <p className="mx-auto mt-1 max-w-[17rem] text-f-sm text-muted-foreground">
-            Pick a mosque or community place and subscribe to the products it needs.
+            Pick a mosque or community place and add the products it needs. This cart is separate from your personal cart.
           </p>
           <button
             onClick={onBrowse}
@@ -103,6 +126,7 @@ export function SubscriptionCartScreen({
             Choose a mosque
           </button>
         </div>
+        {history}
       </section>
     );
   }
@@ -111,13 +135,13 @@ export function SubscriptionCartScreen({
     <section className="animate-rise">
       <BackLink label="Back" onClick={onBack} />
       <div className="mt-2 flex items-center justify-between gap-2">
-        <h1 className="text-f-xl font-extrabold tracking-tight text-foreground">Subscription cart</h1>
+        <h1 className="text-f-xl font-extrabold tracking-tight text-foreground">Mosque cart</h1>
         <span className="bg-aqua-soft flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-f-2xs font-bold text-brand">
           <Repeat className="h-3.5 w-3.5" /> {totals.count} items
         </span>
       </div>
       <p className="mt-1 text-f-xs text-muted-foreground">
-        Separate from your regular cart — these repeat automatically.
+        Separate from your personal cart — nothing here is added to it. Subscribed items repeat; one-time items are delivered once.
       </p>
 
       <div className="mt-4 space-y-5">
@@ -143,9 +167,10 @@ export function SubscriptionCartScreen({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-f-sm font-bold text-foreground">{l.product.name}</p>
                         <p className="truncate text-f-2xs text-muted-foreground">
-                          {planLabel(l.planId)?.every} · save {PLAN_OFF[l.planId]}%
+                          {planEvery(l.planId)}
+                          {PLAN_OFF[l.planId] ? ` · save ${PLAN_OFF[l.planId]}%` : ""}
                         </p>
-                        <p className="mt-1 text-f-sm font-extrabold text-brand">AED {money(unit * l.qty)}</p>
+                        <p className="mt-1 text-f-sm font-extrabold text-brand">KWD {money(unit * l.qty)}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5 xs:gap-2">
                         <button
@@ -166,7 +191,7 @@ export function SubscriptionCartScreen({
                       </div>
                     </div>
                     <div className="mt-2.5 flex items-center gap-1.5">
-                      {plans.map((p) => (
+                      {PLAN_CHOICES.map((p) => (
                         <button
                           key={p.id}
                           onClick={() => setPlan(key, p.id)}
@@ -202,16 +227,16 @@ export function SubscriptionCartScreen({
       </button>
 
       <div className="card-soft mt-5 space-y-2 rounded-2xl p-4 text-f-sm">
-        <SumRow label="Regular price" value={`AED ${money(totals.list)}`} />
-        <SumRow label="Subscription saving" value={`− AED ${money(totals.saving)}`} accent />
+        <SumRow label="Regular price" value={`KWD ${money(totals.list)}`} />
+        <SumRow label="Subscription saving" value={`− KWD ${money(totals.saving)}`} accent />
         <SumRow label="Delivery" value="Free" />
         <div className="my-2 h-px bg-border" />
         <div className="flex items-center justify-between gap-2">
           <span className="font-bold text-foreground">Per delivery round</span>
-          <span className="text-f-lg font-extrabold text-brand">AED {money(totals.perDelivery)}</span>
+          <span className="text-f-lg font-extrabold text-brand">KWD {money(totals.perDelivery)}</span>
         </div>
         <p className="text-f-2xs text-muted-foreground">
-          Each item repeats on its own frequency and is charged when it's delivered. Skip, pause or cancel any time.
+          Subscribed items repeat on their own frequency and are charged when delivered; one-time items are delivered once. Skip, pause or cancel any time.
         </p>
       </div>
 
@@ -219,8 +244,10 @@ export function SubscriptionCartScreen({
         onClick={onCheckout}
         className="mt-5 w-full rounded-2xl bg-brand py-4 text-f-sm font-bold text-primary-foreground"
       >
-        Checkout subscription
+        Checkout mosque cart
       </button>
+
+      {history}
     </section>
   );
 }
@@ -251,13 +278,16 @@ export function SubscriptionCheckoutScreen({
   onBack,
   onHome,
   onMosque,
+  onTrack,
 }: {
   lines: SubLine[];
-  /** Called once the order is placed — parent clears the subscription cart. */
-  onConfirm: () => void;
+  /** Places the order and clears the mosque cart. Returns the new order's reference. */
+  onConfirm: (info: { startDate: Date; slot: string; payment: Payment; name: string; phone: string; notes: string }) => string;
   onBack: () => void;
   onHome: () => void;
   onMosque: () => void;
+  /** Opens tracking for the order that was just placed. */
+  onTrack: (orderId: string) => void;
 }) {
   const days = useMemo(() => upcomingDays(7), []);
   const [start, setStart] = useState(0);
@@ -272,13 +302,13 @@ export function SubscriptionCheckoutScreen({
   const phoneOk = /^\+?[0-9\s-]{8,}$/.test(phone.trim());
   const nameOk = name.trim().length > 1;
 
-  if (done) return <ConfirmationView c={done} onHome={onHome} onMosque={onMosque} />;
+  if (done) return <ConfirmationView c={done} onHome={onHome} onMosque={onMosque} onTrack={() => onTrack(done.ref)} />;
 
   if (lines.length === 0) {
     return (
       <section className="animate-rise">
-        <BackLink label="Subscription cart" onClick={onBack} />
-        <p className="mt-10 text-center text-f-sm text-muted-foreground">Your subscription cart is empty.</p>
+        <BackLink label="Mosque cart" onClick={onBack} />
+        <p className="mt-10 text-center text-f-sm text-muted-foreground">Your mosque cart is empty.</p>
       </section>
     );
   }
@@ -295,21 +325,28 @@ export function SubscriptionCheckoutScreen({
       el?.focus({ preventScroll: true });
       return;
     }
+    const ref = onConfirm({
+      startDate: days[start]!,
+      slot,
+      payment,
+      name: name.trim(),
+      phone: phone.trim(),
+      notes: notes.trim(),
+    });
     setDone({
-      ref: `ABJ-SUB-${Math.floor(100000 + Math.random() * 900000)}`,
+      ref,
       lines,
       start: days[start]!,
       slot,
       payment,
     });
-    onConfirm();
     window.scrollTo({ top: 0 });
   }
 
   return (
     <section className="animate-rise">
-      <BackLink label="Subscription cart" onClick={onBack} />
-      <h1 className="mt-2 text-f-xl font-extrabold tracking-tight text-foreground">Subscription checkout</h1>
+      <BackLink label="Mosque cart" onClick={onBack} />
+      <h1 className="mt-2 text-f-xl font-extrabold tracking-tight text-foreground">Mosque checkout</h1>
 
       {/* Delivery places */}
       <h2 className="mt-5 text-f-sm font-bold text-foreground">Delivering to</h2>
@@ -323,7 +360,7 @@ export function SubscriptionCheckoutScreen({
               <p className="truncate text-f-sm font-bold text-foreground">{place?.name}</p>
               <p className="truncate text-f-2xs text-muted-foreground">{place?.area}</p>
               <p className="mt-1 text-f-2xs text-foreground">
-                {items.map((l) => `${l.qty}× ${l.product.name} (${planLabel(l.planId)?.name})`).join(", ")}
+                {items.map((l) => `${l.qty}× ${l.product.name} (${planName(l.planId)})`).join(", ")}
               </p>
             </div>
           </div>
@@ -448,13 +485,13 @@ export function SubscriptionCheckoutScreen({
 
       {/* Summary */}
       <div className="card-soft mt-6 space-y-2 rounded-2xl p-4 text-f-sm">
-        <SumRow label={`${totals.count} items, regular price`} value={`AED ${money(totals.list)}`} />
-        <SumRow label="Subscription saving" value={`− AED ${money(totals.saving)}`} accent />
+        <SumRow label={`${totals.count} items, regular price`} value={`KWD ${money(totals.list)}`} />
+        <SumRow label="Subscription saving" value={`− KWD ${money(totals.saving)}`} accent />
         <SumRow label="Delivery" value="Free" />
         <div className="my-2 h-px bg-border" />
         <div className="flex items-center justify-between gap-2">
           <span className="font-bold text-foreground">Due at first delivery</span>
-          <span className="text-f-lg font-extrabold text-brand">AED {money(totals.perDelivery)}</span>
+          <span className="text-f-lg font-extrabold text-brand">KWD {money(totals.perDelivery)}</span>
         </div>
         <p className="text-f-2xs text-muted-foreground">
           Starts {formatDay(days[start]!)} ({slot}). Nothing is charged today.
@@ -465,13 +502,23 @@ export function SubscriptionCheckoutScreen({
         onClick={confirm}
         className="mt-5 w-full rounded-2xl bg-brand py-4 text-f-sm font-bold text-primary-foreground"
       >
-        Confirm subscription
+        Confirm order
       </button>
     </section>
   );
 }
 
-function ConfirmationView({ c, onHome, onMosque }: { c: Confirmation; onHome: () => void; onMosque: () => void }) {
+function ConfirmationView({
+  c,
+  onHome,
+  onMosque,
+  onTrack,
+}: {
+  c: Confirmation;
+  onHome: () => void;
+  onMosque: () => void;
+  onTrack: () => void;
+}) {
   const totals = subTotals(c.lines);
   const groups = groupByPlace(c.lines);
   return (
@@ -479,7 +526,7 @@ function ConfirmationView({ c, onHome, onMosque }: { c: Confirmation; onHome: ()
       <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-brand text-primary-foreground">
         <Check className="h-9 w-9" strokeWidth={2.6} />
       </div>
-      <h1 className="mt-4 text-f-xl font-extrabold tracking-tight text-foreground">Subscription confirmed</h1>
+      <h1 className="mt-4 text-f-xl font-extrabold tracking-tight text-foreground">Order confirmed</h1>
       <p className="mt-1 text-f-sm text-muted-foreground">
         First delivery {formatDay(c.start)} ({c.slot})
       </p>
@@ -497,7 +544,7 @@ function ConfirmationView({ c, onHome, onMosque }: { c: Confirmation; onHome: ()
                   <span className="truncate">
                     {l.qty}× {l.product.name}
                   </span>
-                  <span className="shrink-0">{planLabel(l.planId)?.every}</span>
+                  <span className="shrink-0">{planEvery(l.planId)}</span>
                 </li>
               ))}
             </ul>
@@ -506,18 +553,25 @@ function ConfirmationView({ c, onHome, onMosque }: { c: Confirmation; onHome: ()
         <div className="h-px bg-border" />
         <div className="flex items-center justify-between text-f-sm">
           <span className="font-bold text-foreground">Per delivery round</span>
-          <span className="font-extrabold text-brand">AED {money(totals.perDelivery)}</span>
+          <span className="font-extrabold text-brand">KWD {money(totals.perDelivery)}</span>
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-2.5">
+      <button
+        onClick={onTrack}
+        className="mt-5 flex w-full items-center justify-center gap-1.5 rounded-2xl bg-brand py-3.5 text-f-sm font-bold text-primary-foreground"
+      >
+        <Truck className="h-4 w-4 shrink-0" /> Track this order
+      </button>
+
+      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
         <button
           onClick={onMosque}
           className="rounded-2xl border border-border bg-background py-3 text-f-sm font-bold text-foreground"
         >
           Supply another
         </button>
-        <button onClick={onHome} className="rounded-2xl bg-brand py-3 text-f-sm font-bold text-primary-foreground">
+        <button onClick={onHome} className="rounded-2xl border border-border bg-background py-3 text-f-sm font-bold text-foreground">
           Back to home
         </button>
       </div>

@@ -1175,150 +1175,312 @@ function BuyCard({ p, inCart, onBuy }: { p: Product; inCart: number; onBuy: () =
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Inline coupon list (replaces the flip-book viewer)                  */
+/* ------------------------------------------------------------------ */
+
+function BookletCoupons({
+  b,
+  now,
+  picks,
+  defaultOpen,
+  highlight,
+  onUse,
+  onUnuse,
+  onOpenOrder,
+}: {
+  b: Booklet;
+  now: Date;
+  picks: Set<string>;
+  defaultOpen: boolean;
+  highlight?: string | undefined;
+  onUse: (code: string) => void;
+  onUnuse: (code: string) => void;
+  onOpenOrder: (orderId: string) => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const stats = bookletStats(b);
+  const expired = bookletIsExpired(b, now);
+  const days = bookletDaysLeft(b, now);
+  const sorted = [...b.coupons].sort((x, y) => x.number - y.number);
+
+  return (
+    <section id={`booklet-${b.id}`} className="card-soft scroll-mt-20 overflow-hidden rounded-3xl">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 p-3.5 text-left xs:p-4"
+      >
+        <MiniBooklet count={b.couponCount} cover={coverFor(b.productId)} faded={expired} className="w-11" />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2">
+            <span className="text-f-sm font-extrabold text-foreground">{b.couponCount} Gallon booklet</span>
+            {expired ? (
+              <span className="rounded-full bg-secondary px-2 py-0.5 text-f-2xs font-bold text-muted-foreground">Expired</span>
+            ) : days !== null && days <= EXPIRING_SOON_DAYS ? (
+              <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-f-2xs font-bold text-destructive">Expires soon</span>
+            ) : null}
+          </span>
+          <span className="block text-f-2xs text-muted-foreground">
+            Nº {b.id} · {stats.available} of {stats.total} left ·{" "}
+            {expired ? `expired ${formatDate(b.expiresAt)}` : `valid till ${formatDate(b.expiresAt)}`}
+          </span>
+        </span>
+        <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`} />
+      </button>
+
+      {open && (
+        <ul className="divide-y divide-border border-t border-border">
+          {sorted.map((c) => {
+            const status = couponStatus(c, b, now);
+            const picked = picks.has(c.code) && status === "AVAILABLE";
+            return (
+              <li
+                key={c.code}
+                className={`flex items-center gap-3 px-3.5 py-2.5 xs:px-4 ${highlight === c.code ? "bg-aqua-soft" : ""}`}
+              >
+                <span
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-f-xs font-extrabold ${
+                    status === "AVAILABLE" ? "bg-brand text-primary-foreground" : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {pad2(c.number)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate font-mono text-f-xs font-bold tracking-wider ${status === "AVAILABLE" ? "text-brand" : "text-muted-foreground line-through"}`}>
+                    {c.code}
+                  </span>
+                  <span className="block truncate text-f-2xs text-muted-foreground">
+                    {picked
+                      ? "In your cart · used when you place the order"
+                      : status === "REDEEMED"
+                        ? `Used ${c.redeemedAt ? formatDate(c.redeemedAt) : ""}`
+                        : status === "EXPIRED"
+                          ? "Expired"
+                          : "1 × 5 Gallon"}
+                  </span>
+                </span>
+                {status === "AVAILABLE" ? (
+                  picked ? (
+                    <button
+                      onClick={() => onUnuse(c.code)}
+                      className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-f-2xs font-bold text-foreground"
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onUse(c.code)}
+                      className="shrink-0 rounded-full bg-brand px-3.5 py-1.5 text-f-2xs font-bold text-primary-foreground"
+                    >
+                      Use
+                    </button>
+                  )
+                ) : status === "REDEEMED" && c.orderId ? (
+                  <button
+                    onClick={() => onOpenOrder(c.orderId!)}
+                    className="shrink-0 text-f-2xs font-bold text-brand underline-offset-2 hover:underline"
+                  >
+                    {c.orderId}
+                  </button>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-f-2xs font-bold text-muted-foreground">
+                    {COUPON_STATUS_LABEL[status]}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * E-coupons page — one product only: the 20 gallon booklet.
+ *
+ * Simple flow:
+ *   1. Buy the booklet (one tap → added to the cart → checkout, issued instantly).
+ *   2. Your gallons: see how many prepaid gallons are left and order one with a coupon.
+ *   3. Every coupon is listed right on this page (no flip-book viewer).
+ */
 export function BookletScreen({
   booklets,
   now,
   cartQty,
-  focus,
-  onOpenBooklet,
+  focus: _focus,
+  onOpenBooklet: _onOpenBooklet,
+  focusBooklet,
+  picks = [],
+  onUse,
+  onUnuse,
+  onOpenOrder,
   onBuy,
   onUseNext,
   onBack,
-  appliedPromo,
-  onApplyPromo,
-  onRemovePromo,
+  appliedPromo: _appliedPromo,
+  onApplyPromo: _onApplyPromo,
+  onRemovePromo: _onRemovePromo,
 }: {
   booklets: Booklet[];
   now: Date;
   /** Quantity of each product currently in the cart. */
   cartQty: Record<string, number>;
-  /** Scroll straight to a section, e.g. from the cart's "Browse codes". */
+  /** Kept for compatibility with older callers; the page no longer has a codes section. */
   focus?: "codes" | null;
-  onOpenBooklet: (id: string) => void;
+  /** Unused now that coupons are listed inline; kept so older callers still compile. */
+  onOpenBooklet?: (id: string) => void;
+  /** Booklet (and optional coupon) to scroll to, e.g. when opened from an order. */
+  focusBooklet?: { id: string; code?: string | undefined } | null;
+  /** Coupon codes already applied in the cart. */
+  picks?: string[];
+  onUse: (code: string) => void;
+  onUnuse: (code: string) => void;
+  onOpenOrder: (orderId: string) => void;
   onBuy: (p: Product) => void;
   onUseNext: () => void;
   onBack: () => void;
-  appliedPromo: string | null;
-  onApplyPromo: (c: Coupon) => void;
-  onRemovePromo: () => void;
+  appliedPromo?: string | null;
+  onApplyPromo?: (c: Coupon) => void;
+  onRemovePromo?: () => void;
 }) {
-  useEffect(() => {
-    if (focus === "codes") document.getElementById("discount-codes")?.scrollIntoView({ block: "start" });
-  }, [focus]);
+  const product = bookletProducts[0]!;
+  const spec = product.booklet!;
+  const inCart = cartQty[product.id] ?? 0;
+  const fullPrice = gallonPrice() * spec.coupons;
+  const saving = bookletSaving(product);
 
   const active = booklets.filter((b) => !bookletIsExpired(b, now));
   const expired = booklets.filter((b) => bookletIsExpired(b, now));
-  const all = bookletStats(booklets);
+  const stats = bookletStats(active);
   const next = nextExpiringBooklet(booklets, now);
-  const nextDays = next ? bookletDaysLeft(next, now) : null;
   const latest = active.find((b) => b.coupons.some((c) => c.status === "AVAILABLE")) ?? booklets[0];
+  const hasCoupons = stats.available > 0;
+  const pct = stats.total ? (stats.available / stats.total) * 100 : 0;
+  const pickSet = new Set(picks);
+  const ordered = [...active, ...expired];
+
+  useEffect(() => {
+    if (!focusBooklet) return;
+    document.getElementById(`booklet-${focusBooklet.id}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [focusBooklet]);
+
+  const buyCard = (
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand via-brand to-aqua p-4 text-primary-foreground shadow-[0_18px_36px_-22px_rgba(13,42,110,0.9)] xs:p-5">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.2),transparent_55%)]" />
+      <div className="relative flex items-center gap-4">
+        <MiniBooklet count={spec.coupons} cover={spec.cover} className="w-[5.5rem] xs:w-24" />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 text-f-2xs font-extrabold tracking-widest uppercase opacity-90">
+            <Ticket className="h-3.5 w-3.5" /> Gallon booklet
+          </p>
+          <p className="mt-1 text-f-lg leading-tight font-extrabold">{spec.coupons} Gallons</p>
+          <p className="text-f-2xs opacity-85">
+            {spec.coupons} × Abraaj 5 Gallon · valid {spec.validityMonths} months
+          </p>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
+            <span className="text-f-xl leading-none font-extrabold">{formatPrice(product.price)}</span>
+            <s className="text-f-2xs opacity-70">{formatPrice(fullPrice)}</s>
+          </div>
+        </div>
+      </div>
+      <div className="relative mt-3 grid grid-cols-2 gap-1.5 text-center">
+        <div className="rounded-xl bg-white/12 px-2 py-2 ring-1 ring-white/15">
+          <p className="text-f-sm leading-none font-extrabold">{formatPrice(pricePerCoupon(product))}</p>
+          <p className="mt-1 text-[10px] font-semibold opacity-80">per gallon</p>
+        </div>
+        <div className="rounded-xl bg-white/12 px-2 py-2 ring-1 ring-white/15">
+          <p className="text-f-sm leading-none font-extrabold">{formatPrice(saving)}</p>
+          <p className="mt-1 text-[10px] font-semibold opacity-80">you save</p>
+        </div>
+      </div>
+      <button
+        onClick={() => onBuy(product)}
+        className="relative mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3.5 text-f-sm font-extrabold text-brand focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand focus-visible:outline-none"
+      >
+        <ShoppingBag className="h-4 w-4" />
+        {inCart > 0 ? `In cart (${inCart}) · Buy another` : `Buy booklet · ${formatPrice(product.price)}`}
+      </button>
+      <p className="relative mt-2 text-center text-[10px] font-semibold opacity-80">Issued instantly after payment · no delivery fee</p>
+    </div>
+  );
+
+  const myGallons = (
+    <div className="card-soft rounded-3xl p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-f-sm font-bold text-foreground">My gallons</p>
+        {latest && (
+          <button
+            onClick={() => document.getElementById("my-coupons")?.scrollIntoView({ block: "start", behavior: "smooth" })}
+            className="inline-flex items-center gap-1 text-f-xs font-bold text-brand"
+          >
+            <Ticket className="h-3.5 w-3.5" /> See coupons
+          </button>
+        )}
+      </div>
+      <p className="mt-2 text-f-xl leading-none font-extrabold text-brand">
+        {stats.available}
+        <span className="text-f-sm font-bold text-muted-foreground"> / {stats.total} left</span>
+      </p>
+      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+        <span className="block h-full rounded-full bg-aqua transition-[width]" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-2 text-f-2xs text-muted-foreground">
+        {stats.redeemed} used
+        {next ? ` · use by ${formatDate(next.expiresAt)}` : ""}
+      </p>
+      {hasCoupons ? (
+        <button
+          onClick={onUseNext}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 text-f-sm font-bold text-primary-foreground"
+        >
+          <Droplets className="h-4 w-4" /> Order a gallon with a coupon
+        </button>
+      ) : (
+        <p className="mt-4 rounded-xl bg-secondary px-3 py-2.5 text-f-xs font-semibold text-muted-foreground">
+          All coupons used. Buy a new booklet to keep saving.
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <section className="animate-rise">
       <BackLink label="Back" onClick={onBack} />
-      <h1 className="mt-2 text-f-xl font-extrabold tracking-tight text-foreground">E-coupon booklets</h1>
-      <p className="mt-0.5 text-f-sm text-muted-foreground">Prepaid 5 Gallon refills. One coupon pays for one bottle.</p>
+      <h1 className="mt-2 text-f-xl font-extrabold tracking-tight text-foreground">E-coupons</h1>
+      <p className="mt-0.5 text-f-sm text-muted-foreground">
+        Buy {spec.coupons} gallons at once. One coupon = one 5 Gallon bottle.
+      </p>
 
-      {/* wallet */}
-      <div className="relative mt-4 overflow-hidden rounded-3xl bg-gradient-to-br from-brand via-brand to-aqua p-4 text-primary-foreground shadow-[0_18px_36px_-22px_rgba(13,42,110,0.9)] xs:p-5">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.2),transparent_55%)]" />
-        <Droplets className="pointer-events-none absolute -right-4 -bottom-6 h-32 w-32 text-white/10" />
-        <div className="relative flex items-center gap-4">
-          <div className="relative w-[5.5rem] shrink-0">
-            <Donut stats={all} dark className="w-full -rotate-90" />
-            <div className="absolute inset-0 grid place-content-center text-center">
-              <span className="text-f-xl leading-none font-extrabold">{all.available}</span>
-              <span className="text-[10px] font-semibold opacity-80">left</span>
-            </div>
-          </div>
-          <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-f-2xs font-extrabold tracking-widest uppercase opacity-90">
-              <Ticket className="h-3.5 w-3.5" /> Your gallon coupons
-            </p>
-            <p className="mt-1 text-f-lg leading-tight font-extrabold">
-              {all.available} {all.available === 1 ? "gallon" : "gallons"} ready to use
-            </p>
-            <p className="mt-0.5 text-f-2xs opacity-85">
-              {next && nextDays !== null
-                ? `Next expiry ${formatDate(next.expiresAt)} (${nextDays} ${nextDays === 1 ? "day" : "days"})`
-                : booklets.length
-                  ? "No active coupons. Buy a booklet to top up."
-                  : "Buy a booklet and pay less for every gallon."}
-            </p>
-          </div>
-        </div>
-        <dl className="relative mt-4 grid grid-cols-4 gap-1.5 text-center">
-          {(
-            [
-              ["Total", all.total],
-              ["Available", all.available],
-              ["Redeemed", all.redeemed],
-              ["Expired", all.expired],
-            ] as const
-          ).map(([k, v]) => (
-            <div key={k} className="rounded-xl bg-white/12 px-1 py-2 ring-1 ring-white/15">
-              <dd className="text-f-base leading-none font-extrabold">{v}</dd>
-              <dt className="mt-1 truncate text-[10px] font-semibold opacity-80">{k}</dt>
-            </div>
-          ))}
-        </dl>
-        <div className="relative mt-4 flex flex-wrap gap-2">
-          {all.available > 0 && (
-            <button onClick={onUseNext} className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-f-xs font-extrabold text-brand">
-              <ShoppingBag className="h-3.5 w-3.5" /> Use a coupon
-            </button>
-          )}
-          {latest && (
-            <button
-              onClick={() => onOpenBooklet(latest.id)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-f-xs font-bold ring-1 ring-white/30"
-            >
-              <BookOpen className="h-3.5 w-3.5" /> Open booklet
-            </button>
-          )}
-        </div>
+      {/* Customers with coupons see their gallons first; new customers see the booklet to buy. */}
+      <div className="mt-4 space-y-4">
+        {hasCoupons ? (
+          <>
+            {myGallons}
+            {buyCard}
+          </>
+        ) : (
+          <>
+            {buyCard}
+            {active.length > 0 && myGallons}
+          </>
+        )}
       </div>
-
-      {/* shelf */}
-      <h2 className="mt-7 text-f-base font-bold text-foreground">My booklets</h2>
-      {booklets.length === 0 ? (
-        <div className="card-soft mt-3 flex items-center gap-3 rounded-3xl p-4">
-          <div className="bg-aqua-soft grid h-11 w-11 shrink-0 place-items-center rounded-full">
-            <BookOpen className="h-5 w-5 text-brand" />
-          </div>
-          <p className="text-f-xs text-muted-foreground">Booklets you buy appear here, ready to open and use at checkout.</p>
-        </div>
-      ) : (
-        <ul className="mt-3 space-y-3">
-          {[...active, ...expired].map((b) => (
-            <ShelfItem key={b.id} b={b} now={now} onOpen={() => onOpenBooklet(b.id)} />
-          ))}
-        </ul>
-      )}
-
-      {/* buy */}
-      <div className="mt-8 flex items-end justify-between gap-2">
-        <h2 className="text-f-base font-bold text-foreground">Buy a booklet</h2>
-        <span className="text-f-2xs font-semibold text-muted-foreground">Issued instantly · no delivery fee</span>
-      </div>
-      <ul className="mt-4 space-y-4">
-        {bookletProducts.map((p) => (
-          <BuyCard key={p.id} p={p} inCart={cartQty[p.id] ?? 0} onBuy={() => onBuy(p)} />
-        ))}
-      </ul>
 
       {/* how it works */}
       <div className="card-soft mt-6 rounded-3xl p-4">
         <h2 className="flex items-center gap-1.5 text-f-sm font-bold text-foreground">
           <Receipt className="h-4 w-4 text-brand" /> How it works
         </h2>
-        <ol className="mt-3 grid gap-3 xs:grid-cols-3">
+        <ol className="mt-3 space-y-3">
           {[
-            ["Buy a booklet", "Pay once at checkout. Your coupons are issued straight away."],
-            ["Order gallons", "Add 5 Gallon bottles and pay with coupons in the cart."],
-            ["Track every coupon", "Each one is stamped redeemed with its order. No reuse."],
+            ["Buy the booklet", `Pay once. You get ${spec.coupons} gallon coupons straight away.`],
+            ["Order a gallon", "Tap “Order a gallon with a coupon”. It's added to your cart for free."],
+            ["Check out", "The coupon is used when you place the order. Delivery as normal."],
           ].map(([t, d], i) => (
-            <li key={t} className="flex gap-2.5 xs:flex-col xs:gap-1.5">
+            <li key={t} className="flex gap-2.5">
               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand text-f-xs font-extrabold text-primary-foreground">{i + 1}</span>
               <span className="min-w-0">
                 <span className="block text-f-xs font-bold text-foreground">{t}</span>
@@ -1329,16 +1491,28 @@ export function BookletScreen({
         </ol>
       </div>
 
-      {/* promo codes (the existing discount-code coupons) */}
-      {/* <div id="discount-codes" className="scroll-mt-20">
-        <h2 className="mt-8 text-f-base font-bold text-foreground">Discount codes</h2>
-        <p className="mt-0.5 text-f-xs text-muted-foreground">One code per order, on top of any e-coupons. Codes don't apply to booklets.</p>
-        <div className="mt-3 space-y-3">
-          {promoCoupons.map((c) => (
-            <PromoTicket key={c.id} coupon={c} detailed applied={appliedPromo === c.code} onApply={onApplyPromo} onRemove={onRemovePromo} />
-          ))}
+      {/* Every coupon, right on this page. Tap "Use" to pay a 5 Gallon with it. */}
+      {ordered.length > 0 && (
+        <div id="my-coupons" className="scroll-mt-20">
+          <h2 className="mt-7 text-f-base font-bold text-foreground">My coupons</h2>
+          <p className="mt-0.5 text-f-xs text-muted-foreground">Tap “Use” to add a 5 Gallon to your cart, paid by that coupon.</p>
+          <div className="mt-3 space-y-3">
+            {ordered.map((b, i) => (
+              <BookletCoupons
+                key={b.id}
+                b={b}
+                now={now}
+                picks={pickSet}
+                defaultOpen={focusBooklet ? focusBooklet.id === b.id : i === 0}
+                highlight={focusBooklet?.id === b.id ? focusBooklet.code : undefined}
+                onUse={onUse}
+                onUnuse={onUnuse}
+                onOpenOrder={onOpenOrder}
+              />
+            ))}
+          </div>
         </div>
-      </div> */}
+      )}
     </section>
   );
 }
@@ -1378,11 +1552,11 @@ export function BookletBanner({ booklets, now, onOpen }: { booklets: Booklet[]; 
           ) : (
             <>
               <p className="mt-1.5 text-f-xl leading-tight font-extrabold tracking-tight">Prepay your gallons</p>
-              <p className="mt-0.5 text-f-xs opacity-90">Booklets from {formatPrice(pricePerCoupon(best))} a 5 Gallon. Save up to {formatPrice(bookletSaving(best))}.</p>
+              <p className="mt-0.5 text-f-xs opacity-90">{best.booklet!.coupons} gallons for {formatPrice(best.price)}. Save {formatPrice(bookletSaving(best))}.</p>
             </>
           )}
           <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white px-3.5 py-1.5 text-f-xs font-extrabold text-brand">
-            {stats.available > 0 ? "Open my booklet" : "See booklets"} <ChevronRight className="h-3.5 w-3.5" />
+            {stats.available > 0 ? "My gallons" : "Buy 20 gallons"} <ChevronRight className="h-3.5 w-3.5" />
           </span>
         </div>
         <MiniBooklet count={count} cover={cover} className="relative w-[5.5rem] xs:w-24" />
@@ -1425,11 +1599,11 @@ export function CartBookletCoupons({
         onClick={onOpenBooklets}
         className="card-soft mt-5 flex w-full items-center gap-3 rounded-2xl p-3.5 text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
       >
-        <MiniBooklet count={20} cover={bookletProducts[1]!.booklet!.cover} className="w-10" />
+        <MiniBooklet count={bookletProducts[0]!.booklet!.coupons} cover={bookletProducts[0]!.booklet!.cover} className="w-10" />
         <span className="min-w-0 flex-1">
           <span className="block text-f-sm font-bold text-foreground">Pay less for your gallons</span>
           <span className="block text-f-2xs text-muted-foreground">
-            E-coupon booklets from {formatPrice(pricePerCoupon(bookletProducts[bookletProducts.length - 1]!))} a 5 Gallon.
+            {bookletProducts[0]!.booklet!.coupons} gallon booklet · {formatPrice(pricePerCoupon(bookletProducts[0]!))} a 5 Gallon.
           </span>
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />

@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Star,
+  Store,
   Tag,
   Ticket,
   Truck,
@@ -21,10 +22,10 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import logo from "@/assets/logo-2.png";
+// Tightly cropped copy of logo-2.png (no empty space around it) so it can be shown bigger.
+import logo from "@/assets/logo-header.png";
 import { Splash } from "@/components/abraaj/Splash";
 import { Sidebar } from "@/components/abraaj/Sidebar";
-import { ThemeMenuButton } from "@/components/abraaj/ThemeToggle";
 import { DealCard, ShowcaseSection } from "@/components/abraaj/CategoryShowcase";
 import { Moments } from "@/components/abraaj/Moments";
 import { PromoBar } from "@/components/abraaj/PromoBar";
@@ -41,7 +42,7 @@ import { mosqueOrdersApi, type MosqueOrder } from "@/lib/mosque-orders";
 import { NotificationsPanel } from "@/components/abraaj/NotificationsPanel";
 import { CheckoutScreen } from "@/components/abraaj/Checkout";
 import { CartCoupon } from "@/components/abraaj/Coupons";
-import { BookletBanner, BookletScreen, BookletViewer, CartBookletCoupons } from "@/components/abraaj/Booklet";
+import { BookletBanner, BookletScreen, CartBookletCoupons } from "@/components/abraaj/Booklet";
 import {
   ProductCard,
   CardDesignPicker,
@@ -69,9 +70,11 @@ import { ORDER_STATUS_LABEL, formatDate, ordersApi, subscriptionDates, subscript
 import { authApi, type SessionStatus } from "@/lib/auth";
 import {
   WalletError,
+  POINTS_VALID_MONTHS,
   availablePoints,
+  nextPointsExpiry,
+  pointsBatches,
   pointsEvents,
-  pointsToKwd,
   walletApi,
   walletBalance,
   type WalletMethod,
@@ -119,49 +122,21 @@ type Tab = "home" | "shop" | "deals" | "plan" | "cart" | "account";
 // they share the header, bottom nav and cart state with the rest of the app.
 type Screen = Tab | "about" | "mosque" | "subcart" | "subcheckout" | "mosqueorders" | "mosquetrack" | "checkout" | "orders" | "order" | "track" | "coupons" | "subscriptions" | "wallet" | "wallethistory" | "points" | "pointshistory";
 
+// Shop filter chips: "Offers" sits right after "All" and shows every product at its deal price.
+const SHOP_FILTERS = ["All", "Offers", ...categories.filter((c) => c !== "All")] as const;
+
 // Shared between the header logo and the travelling boot logo so the flight always
 // lands on the exact size and position of the real one, at any screen width.
 const HEADER_TOP = "top-[max(0.75rem,env(safe-area-inset-top))]";
-const LOGO_SIZE = "h-[clamp(3.25rem,14vw,4.5rem)]";
+const LOGO_SIZE = "h-[clamp(3.5rem,15.5vw,4.5rem)]";
 // Keeps the header row exactly as tall as the logo so the logo sits flush with the top padding.
-const LOGO_ROW = "min-h-[clamp(3.25rem,14vw,4.5rem)]";
-
-// How long the header points chip shows the points before flipping to their KWD value
-// (1,000 points = KWD 1.000, see POINTS_PER_KWD in lib/wallet).
-const POINTS_LOOP_MS = 2500;
+const LOGO_ROW = "min-h-[clamp(3.5rem,15.5vw,4.5rem)]";
 
 // Phases of the boot logo:
 // "center"   -> big logo centered on screen, sitting on top of the splash
 // "toHeader" -> logo is animating/shrinking into the header's exact slot
 // "done"     -> animation finished, overlay is unmounted, the real header logo is shown
 type LogoPhase = "center" | "toHeader" | "done";
-
-/** Header points balance that loops between the points and their Kuwaiti Dinar value. */
-function PointsChip({ points, onClick }: { points: number; onClick: () => void }) {
-  const [showKwd, setShowKwd] = useState(false);
-
-  useEffect(() => {
-    const id = setInterval(() => setShowKwd((v) => !v), POINTS_LOOP_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  const kwd = pointsToKwd(points).toFixed(3);
-
-  return (
-    <button
-      aria-label={showKwd ? `Your points, worth ${kwd} Kuwaiti dinar` : `Your points: ${points}`}
-      onClick={onClick}
-      // Fixed width: the chip never resizes when it flips between points and KWD, so the
-      // header (logo, theme and cart buttons) stays put.
-      className="flex h-7 w-[4.75rem] shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full bg-secondary px-2 text-brand xs:h-8 xs:w-[5.25rem]"
-    >
-      {!showKwd && <Star className="h-3 w-3 shrink-0" />}
-      <span key={showKwd ? "kwd" : "points"} className="animate-fade text-f-2xs font-bold whitespace-nowrap tabular-nums">
-        {showKwd ? `${kwd} KWD` : points}
-      </span>
-    </button>
-  );
-}
 
 function App() {
   const [booting, setBooting] = useState(true);
@@ -282,7 +257,8 @@ function App() {
     () =>
       products.filter(
         (p) =>
-          (category === "All" || p.category === category) &&
+          // "Offers" shows every product at its deal price.
+          (category === "All" || category === "Offers" || p.category === category) &&
           p.name.toLowerCase().includes(query.toLowerCase()),
       ),
     [category, query],
@@ -299,11 +275,14 @@ function App() {
   const pricing = cartPricing(cart, coupon, appliedPicks.length);
   const count = pricing.count;
 
-  // Points system. `redeemable` = points from earlier orders + placed orders, minus anything
-  // already redeemed to the wallet. Points still in the cart count in the total but can't be redeemed yet.
+  // Points system. `redeemable` = unexpired points from earlier orders + placed orders
+  // (each order's points expire POINTS_VALID_MONTHS after the order). Points still in the
+  // cart count in the total but only become available once the order is placed.
+  // Points can no longer be redeemed into the wallet.
   const cartPoints = pricing.points;
-  const redeemable = availablePoints(orders, walletTxns);
+  const redeemable = availablePoints(orders, walletTxns, now);
   const totalPoints = redeemable + cartPoints;
+  const pointsExpiry = nextPointsExpiry(orders, walletTxns, now);
   const walletKwd = walletBalance(walletTxns);
 
   // E-coupons left — shown as a badge on the bottom-bar E-coupons tab.
@@ -387,12 +366,16 @@ function App() {
     setCouponPicks((p) => p.filter((c) => c !== code));
   }
 
+  // No more flip-book viewer: a booklet opens on the E-coupons page, scrolled to its coupons.
   function openBooklet(id: string, code?: string) {
     setBooklets(bookletsApi.list());
     setViewer({ id, code });
+    setCouponsFocus(null);
+    openScreen("coupons");
   }
 
   function openCoupons(focus: "codes" | null = null) {
+    setViewer(null);
     setCouponsFocus(focus);
     openScreen("coupons");
   }
@@ -507,7 +490,7 @@ function App() {
     window.scrollTo({ top: 0 });
   }
 
-  // ---- Wallet + points ----
+  // ---- Wallet ----
   /** Returns an error message to show, or null when the money was added. */
   function topUpWallet(amount: number, method: WalletMethod): string | null {
     try {
@@ -516,17 +499,6 @@ function App() {
       return null;
     } catch (e) {
       return e instanceof WalletError ? e.message : "We couldn't add the money. Please try again.";
-    }
-  }
-
-  /** Returns an error message to show, or null when the points were redeemed. */
-  function redeemPoints(points: number): string | null {
-    try {
-      walletApi.redeemPoints(points, redeemable);
-      setWalletTxns(walletApi.list());
-      return null;
-    } catch (e) {
-      return e instanceof WalletError ? e.message : "We couldn't redeem your points. Please try again.";
     }
   }
 
@@ -583,7 +555,7 @@ function App() {
     if (id === "offers") openScreen("deals");
     else if (id === "bottles") goToShop("Bottles");
     else if (id === "gallons") goToShop("Gallons");
-    else if (id === "tissue-ice") goToShop("Essentials");
+    else if (id === "wallet") openScreen("wallet");
     else if (id === "subscription") openScreen("plan");
     else if (id === "mosque") openScreen("mosque");
   }
@@ -627,32 +599,18 @@ function App() {
           headerHidden ? "-translate-y-full" : "translate-y-0"
         } ${headerElevated ? "shadow-[0_8px_24px_-14px_rgba(13,42,110,0.4)]" : "shadow-none"}`}
       >
-        {/* Left group: menu + cart. Search now lives inside the menu; the wallet
+        {/* Left group: menu. Search now lives inside the menu; the wallet
             lives in the bottom bar. */}
         <div className={`flex shrink-0 items-center gap-1.5 xs:gap-2 ${LOGO_ROW}`}>
           <button
             aria-label="Open menu"
             onClick={() => setMenuOpen(true)}
-            className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-8 xs:w-8"
+            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-brand xs:h-11 xs:w-11"
           >
-            <Menu className="h-3.5 w-3.5" />
+            <Menu className="h-5 w-5" />
             {/* Dot so unread notifications stay discoverable now that the bell is in the drawer. */}
             {unreadNotifCount > 0 && (
-              <span className="absolute top-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-secondary bg-brand" />
-            )}
-          </button>
-          <button
-            aria-label="Cart"
-            onClick={() => setTab("cart")}
-            className={`relative grid h-7 w-7 shrink-0 place-items-center rounded-full xs:h-8 xs:w-8 ${
-              tab === "cart" ? "bg-brand text-primary-foreground" : "bg-secondary text-brand"
-            }`}
-          >
-            <ShoppingBag className="h-3.5 w-3.5" />
-            {count > 0 && (
-              <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[9px] font-bold text-primary-foreground ring-2 ring-background">
-                {count}
-              </span>
+              <span className="absolute top-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-secondary bg-brand" />
             )}
           </button>
         </div>
@@ -662,15 +620,28 @@ function App() {
         <img
           src={logo}
           alt="Abraaj Water"
-          className={`pointer-events-none absolute left-1/2 w-auto max-w-[42vw] -translate-x-1/2 object-contain dark:brightness-0 dark:invert transition-opacity duration-300 ${LOGO_SIZE} ${
+          className={`pointer-events-none absolute left-1/2 w-auto max-w-[56vw] -translate-x-1/2 object-contain dark:brightness-0 dark:invert transition-opacity duration-300 ${LOGO_SIZE} ${
             logoPhase === "done" ? "opacity-100" : "opacity-0"
           }`}
         />
 
-        {/* Right group: points (loops points ↔ KWD). Profile now lives in the bottom bar. */}
+        {/* Right group: cart. Dark mode now lives only in the side menu; points moved to
+            the promo bar above the tab bar; profile lives in the bottom bar. */}
         <div className="flex shrink-0 items-center gap-1.5 xs:gap-2">
-          <ThemeMenuButton />
-          <PointsChip points={totalPoints} onClick={() => openScreen("points")} />
+          <button
+            aria-label="Cart"
+            onClick={() => setTab("cart")}
+            className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full xs:h-11 xs:w-11 ${
+              tab === "cart" ? "bg-brand text-primary-foreground" : "bg-secondary text-brand"
+            }`}
+          >
+            <ShoppingBag className="h-5 w-5" />
+            {count > 0 && (
+              <span className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-background">
+                {count}
+              </span>
+            )}
+          </button>
         </div>
       </header>
 
@@ -707,36 +678,55 @@ function App() {
               />
             </div>
             <div className="no-scrollbar mx-screen-neg px-screen mt-4 flex gap-2 overflow-x-auto">
-              {categories.map((c) => (
+              {SHOP_FILTERS.map((c) => (
                 <button
                   key={c}
                   onClick={() => setCategory(c)}
-                  className={`shrink-0 rounded-full px-3.5 py-2 text-f-xs font-semibold transition-colors xs:px-4 ${
+                  className={`flex shrink-0 items-center gap-1 rounded-full px-3.5 py-2 text-f-xs font-semibold transition-colors xs:px-4 ${
                     category === c
                       ? "bg-brand text-primary-foreground"
                       : "bg-secondary text-muted-foreground"
                   }`}
                 >
+                  {c === "Offers" && <Tag className="h-3.5 w-3.5 -rotate-12" />}
                   {c}
                 </button>
               ))}
             </div>
 
-            {/* Card style selector */}
-            <CardDesignPicker value={cardDesign} onChange={changeCardDesign} />
+            {category === "Offers" ? (
+              /* Offers: deal cards with the discounted one-time and subscribe prices. */
+              <div className="mt-5 grid grid-cols-2 gap-2.5 xs:gap-3">
+                {list.map((p, i) => (
+                  <DealCard
+                    key={p.id}
+                    product={p}
+                    delay={i * 40}
+                    onOpen={() => setActive(p)}
+                    onSubscribe={() => subscribeNow(p)}
+                    onOneTime={() => addOnceAndOpenCart(p)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <>
+                {/* Card style selector */}
+                <CardDesignPicker value={cardDesign} onChange={changeCardDesign} />
 
-            <div className="mt-5 grid grid-cols-2 gap-2.5 xs:gap-3">
-              {list.map((p, i) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  delay={i * 40}
-                  design={cardDesign}
-                  onOpen={() => setActive(p)}
-                  onAdd={() => add(p)}
-                />
-              ))}
-            </div>
+                <div className="mt-5 grid grid-cols-2 gap-2.5 xs:gap-3">
+                  {list.map((p, i) => (
+                    <ProductCard
+                      key={p.id}
+                      product={p}
+                      delay={i * 40}
+                      design={cardDesign}
+                      onOpen={() => setActive(p)}
+                      onAdd={() => add(p)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
             {list.length === 0 && (
               <p className="mt-10 text-center text-f-sm text-muted-foreground">Nothing matches that search.</p>
             )}
@@ -767,6 +757,7 @@ function App() {
             points={totalPoints}
             onShop={() => goToShop()}
             onSubscribe={() => setTab("plan")}
+            onCouponBuy={() => openCoupons()}
             onCheckout={() => openScreen("checkout")}
             couponCode={couponCode}
             onApplyCoupon={applyCoupon}
@@ -796,7 +787,11 @@ function App() {
             now={now}
             cartQty={Object.fromEntries(cart.filter((l) => !l.planId).map((l) => [l.product.id, l.qty]))}
             focus={couponsFocus}
-            onOpenBooklet={(id) => openBooklet(id)}
+            focusBooklet={viewer}
+            picks={validPicks}
+            onUse={(code) => payWithCoupon(code)}
+            onUnuse={removeBookletCoupon}
+            onOpenOrder={(id) => openOrder(id, "order")}
             onBuy={buyBooklet}
             onUseNext={() => payWithCoupon()}
             onBack={() => openScreen("home")}
@@ -858,6 +853,7 @@ function App() {
         {tab === "account" && (
           <AccountScreen
             points={totalPoints}
+            pointsExpiry={pointsExpiry}
             walletKwd={walletKwd}
             orderCount={orders.length}
             couponsLeft={couponsLeft}
@@ -887,11 +883,9 @@ function App() {
           <WalletScreen
             balance={walletKwd}
             txns={walletTxns}
-            pointsAvailable={redeemable}
             onBack={() => openScreen("account")}
             onTopUp={topUpWallet}
             onHistory={() => openScreen("wallethistory")}
-            onPoints={() => openScreen("points")}
           />
         )}
 
@@ -908,17 +902,17 @@ function App() {
           <PointsScreen
             available={redeemable}
             pending={cartPoints}
-            events={pointsEvents(orders, walletTxns)}
+            events={pointsEvents(orders, walletTxns, now)}
+            batches={pointsBatches(orders, walletTxns, now)}
             onBack={() => openScreen("account")}
-            onRedeem={redeemPoints}
             onHistory={() => openScreen("pointshistory")}
-            onWallet={() => openScreen("wallet")}
+            onShop={() => goToShop()}
           />
         )}
 
         {tab === "pointshistory" && (
           <PointsHistoryScreen
-            events={pointsEvents(orders, walletTxns)}
+            events={pointsEvents(orders, walletTxns, now)}
             available={redeemable}
             onBack={() => openScreen("points")}
             onShop={() => goToShop()}
@@ -1015,7 +1009,7 @@ function App() {
 
       {/* Promo bar + tab bar share one fixed shell. */}
       <div className="fixed bottom-0 left-1/2 z-30 w-full max-w-md -translate-x-1/2">
-        <PromoBar onCta={(go) => setTab(go as Tab)} />
+        <PromoBar onCta={(go) => setTab(go as Tab)} points={totalPoints} onPoints={() => openScreen("points")} />
 
         <nav className="border-t border-border bg-background/95 px-2 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md xs:px-4">
           <ul className="flex items-end justify-between">
@@ -1034,26 +1028,26 @@ function App() {
               />
             </li>
 
-            {/* Raised deals button — stays in the true center of the 5-slot bar. */}
+            {/* Raised shop button — stays in the true center of the 5-slot bar. */}
             <li className="flex-1">
               <button
-                onClick={() => setTab("deals")}
+                onClick={() => goToShop()}
                 className="flex w-full flex-col items-center gap-1"
-                aria-label="Deals"
+                aria-label="Shop"
               >
                 <span
                   className={`-mt-6 grid h-12 w-12 place-items-center rounded-full border-4 border-background shadow-[0_10px_22px_-8px_rgba(13,42,110,0.7)] transition-colors xs:-mt-7 xs:h-14 xs:w-14 ${
-                    tab === "deals" ? "bg-brand text-primary-foreground" : "bg-aqua text-primary-foreground"
+                    tab === "shop" ? "bg-brand text-primary-foreground" : "bg-aqua text-primary-foreground"
                   }`}
                 >
-                  <Tag className="h-5 w-5 -rotate-12 xs:h-6 xs:w-6" />
+                  <Store className="h-5 w-5 xs:h-6 xs:w-6" />
                 </span>
                 <span
                   className={`text-[9px] font-semibold xs:text-[10px] ${
-                    tab === "deals" ? "text-brand" : "text-muted-foreground"
+                    tab === "shop" ? "text-brand" : "text-muted-foreground"
                   }`}
                 >
-                  Deals
+                  Shop
                 </span>
               </button>
             </li>
@@ -1080,32 +1074,6 @@ function App() {
           </ul>
         </nav>
       </div>
-
-      {viewer &&
-        (() => {
-          const b = booklets.find((x) => x.id === viewer.id);
-          return b ? (
-            <BookletViewer
-              key={b.id}
-              booklet={b}
-              now={now}
-              focusCode={viewer.code}
-              picks={validPicks}
-              knownOrders={new Set(orders.map((o) => o.id))}
-              onClose={() => setViewer(null)}
-              onUse={(code) => payWithCoupon(code)}
-              onUnuse={removeBookletCoupon}
-              onBuyMore={() => {
-                setViewer(null);
-                openCoupons();
-              }}
-              onOpenOrder={(id) => {
-                setViewer(null);
-                openOrder(id, "order");
-              }}
-            />
-          ) : null;
-        })()}
 
       <Sidebar
         open={menuOpen}
@@ -1141,7 +1109,7 @@ function App() {
           aria-hidden="true"
           className={`pointer-events-none fixed z-50 w-auto object-contain dark:brightness-0 dark:invert transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
             logoPhase === "toHeader"
-              ? `${HEADER_TOP} ${LOGO_SIZE} left-1/2 max-w-[42vw] -translate-x-1/2 translate-y-0 opacity-100 drop-shadow-none`
+              ? `${HEADER_TOP} ${LOGO_SIZE} left-1/2 max-w-[56vw] -translate-x-1/2 translate-y-0 opacity-100 drop-shadow-none`
               : `top-1/2 left-1/2 h-[clamp(4.5rem,24vw,7rem)] max-w-[62vw] -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_10px_28px_rgba(15,58,138,0.35)] ${
                   logoMounted ? "scale-100 opacity-100" : "scale-90 opacity-0"
                 }`
@@ -1733,6 +1701,7 @@ function CartScreen({
   points,
   onShop,
   onSubscribe,
+  onCouponBuy,
   onCheckout,
   couponCode,
   onApplyCoupon,
@@ -1751,6 +1720,8 @@ function CartScreen({
   points: number;
   onShop: () => void;
   onSubscribe: () => void;
+  /** Opens the e-coupon page to buy the gallon booklet / pay with coupons. */
+  onCouponBuy: () => void;
   onCheckout: () => void;
   couponCode: string | null;
   onApplyCoupon: (c: Coupon) => void;
@@ -1821,7 +1792,7 @@ function CartScreen({
                   ? `Digital booklet · ${l.product.size}, issued instantly`
                   : isSubscription(l)
                     ? `Subscription · ${lineLabel(l)}`
-                    : "One-time · within 1 day"}
+                    : "Delivered within 1 day"}
               </p>
               <p className="mt-1 text-f-sm font-extrabold text-brand">{formatPrice(lineTotal(l))}</p>
             </div>
@@ -1878,6 +1849,13 @@ function CartScreen({
           className="flex items-center justify-center gap-1.5 rounded-2xl bg-brand py-3 text-f-sm font-bold text-primary-foreground"
         >
           <Repeat className="h-4 w-4 shrink-0" /> Subscribe
+        </button>
+        {/* Coupon buy: prepay gallons with the 20-gallon e-coupon booklet. */}
+        <button
+          onClick={onCouponBuy}
+          className="bg-aqua-soft col-span-2 flex items-center justify-center gap-1.5 rounded-2xl py-3 text-f-sm font-bold text-brand"
+        >
+          <Ticket className="h-4 w-4 shrink-0" /> Coupon buy
         </button>
       </div>
 
@@ -1977,6 +1955,7 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
 
 function AccountScreen({
   points,
+  pointsExpiry,
   walletKwd,
   orderCount,
   couponsLeft,
@@ -1991,6 +1970,8 @@ function AccountScreen({
   onDeleteAccount,
 }: {
   points: number;
+  /** Next lot of points to expire, if any. */
+  pointsExpiry: { points: number; expiresAt: string } | null;
   walletKwd: number;
   orderCount: number;
   couponsLeft: number;
@@ -2046,7 +2027,11 @@ function AccountScreen({
           </span>
           <span className="min-w-0 max-w-full">
             <span className="block truncate text-f-sm font-bold text-foreground">{points.toLocaleString("en-US")} points</span>
-            <span className="block truncate text-f-xs text-muted-foreground">Worth {formatPrice(pointsToKwd(points))}</span>
+            <span className="block truncate text-f-xs text-muted-foreground">
+              {pointsExpiry
+                ? `${pointsExpiry.points.toLocaleString("en-US")} expire ${formatDate(pointsExpiry.expiresAt)}`
+                : `Valid ${POINTS_VALID_MONTHS} months`}
+            </span>
           </span>
         </button>
       </div>

@@ -20,7 +20,6 @@ import {
   MIN_TOPUP,
   TOPUP_PRESETS,
   WALLET_METHOD_LABEL,
-  pointsToKwd,
   walletTotals,
   type WalletMethod,
   type WalletTxn,
@@ -92,21 +91,16 @@ export function WalletTxnRow({ txn }: { txn: WalletTxn }) {
 export function WalletScreen({
   balance,
   txns,
-  pointsAvailable,
   onBack,
   onTopUp,
   onHistory,
-  onPoints,
 }: {
   balance: number;
   txns: WalletTxn[];
-  /** Points the customer could redeem into the wallet. */
-  pointsAvailable: number;
   onBack: () => void;
   /** Adds money. Returns an error message to show, or null when it worked. */
   onTopUp: (amount: number, method: WalletMethod) => string | null;
   onHistory: () => void;
-  onPoints: () => void;
 }) {
   const [amountText, setAmountText] = useState("10");
   const [method, setMethod] = useState<WalletMethod>("knet");
@@ -276,23 +270,6 @@ export function WalletScreen({
         </button>
       </div>
 
-      {/* Points → wallet */}
-      <button
-        onClick={onPoints}
-        className="card-soft mt-3 flex w-full items-center gap-3 rounded-3xl p-3.5 text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none xs:p-4"
-      >
-        <span className="bg-aqua-soft grid h-11 w-11 shrink-0 place-items-center rounded-full">
-          <Star className="h-5 w-5 text-brand" aria-hidden="true" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-f-sm font-bold text-foreground">Turn points into wallet money</span>
-          <span className="block truncate text-f-xs text-muted-foreground">
-            {pointsAvailable.toLocaleString("en-US")} points · worth {formatPrice(pointsToKwd(pointsAvailable))}
-          </span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      </button>
-
       {/* Recent activity */}
       <div className="mt-6 flex items-center justify-between gap-2">
         <SectionTitle Icon={History}>Recent activity</SectionTitle>
@@ -386,7 +363,7 @@ export function WalletHistoryScreen({
             title={filter === "in" ? "No money in yet" : "Nothing spent yet"}
             text={
               filter === "in"
-                ? "Top-ups and redeemed points will be listed here."
+                ? "Top-ups and payments will be listed here."
                 : "Payments made from your wallet will be listed here."
             }
           />

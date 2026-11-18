@@ -129,15 +129,12 @@ export function Sidebar({
               onViewAll();
               onClose();
             }}
-            className="absolute right-4 bottom-14 left-4 z-20 flex items-center justify-between gap-2 rounded-2xl bg-background px-4 py-3 text-f-sm font-bold text-brand shadow-[0_14px_30px_-12px_rgba(4,20,60,0.6)]"
+            className="absolute right-4 bottom-4 left-4 z-20 flex items-center justify-between gap-2 rounded-2xl bg-background px-4 py-3 text-f-sm font-bold text-brand shadow-[0_14px_30px_-12px_rgba(4,20,60,0.6)]"
           >
             <span className="truncate">View all products</span>
             <ChevronRight className="h-4 w-4 shrink-0" />
           </button>
 
-          <div className="absolute right-0 bottom-0 left-0 z-20">
-            <Ribbon text="Return refreshed" className="text-brand" diagonal={false} />
-          </div>
         </div>
 
         <nav className="no-scrollbar flex-1 overflow-y-auto px-4 pt-1 pb-[max(1.5rem,env(safe-area-inset-bottom))]">

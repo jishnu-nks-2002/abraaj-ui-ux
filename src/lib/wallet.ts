@@ -15,17 +15,20 @@ import { hasStorage, read, write } from "@/lib/storage";
  * The wallet is a ledger of transactions. The balance is never stored, it is
  * always the sum of the ledger, so the balance and the history can't disagree.
  *
- * Points are derived the same way: the balance is BASE_POINTS (points from
- * earlier orders) + points earned on placed orders - points redeemed to the wallet.
+ * Points are derived the same way, but they can no longer be turned into wallet
+ * money. Every batch of points (one per order, plus BASE_POINTS from earlier
+ * orders) is valid for POINTS_VALID_MONTHS and then expires. The balance is the
+ * sum of the batches that haven't expired yet.
  */
 
-/** 1,000 points = KWD 1.000, so 1 point = KWD 0.001. */
+/** Kept for older screens that show a points value; points can't be redeemed to the wallet. */
 export const POINTS_PER_KWD = 1000;
 export const POINT_VALUE_KWD = 1 / POINTS_PER_KWD;
-/** Smallest amount of points that can be redeemed in one go. */
-export const MIN_REDEEM_POINTS = 100;
-/** Quick-pick amounts on the Points page. */
-export const REDEEM_PRESETS = [100, 250, 500];
+
+/** How long earned points stay valid, counted from the order date. */
+export const POINTS_VALID_MONTHS = 12;
+/** Points expiring within this many days are flagged "expiring soon". */
+export const POINTS_EXPIRING_SOON_DAYS = 30;
 
 /** Wallet top-up limits and quick-pick amounts, in KWD. */
 export const MIN_TOPUP = 1;
@@ -76,44 +79,144 @@ export const walletTotals = (txns: WalletTxn[]) => ({
   used: round3(txns.filter((t) => t.direction === "out").reduce((n, t) => n + t.amount, 0)),
 });
 
-/** Points already turned into wallet money. */
+/** Points turned into wallet money by older versions of the app (redeeming is no longer offered). */
 export const redeemedPoints = (txns: WalletTxn[]) =>
   txns.reduce((n, t) => (t.kind === "POINTS" ? n + (t.points ?? 0) : n), 0);
 
 /** Points earned on placed orders (not counting what is still sitting in the cart). */
 export const orderPoints = (orders: Order[]) => orders.reduce((n, o) => n + o.pointsEarned, 0);
 
-/** Points the customer can redeem right now. */
-export const availablePoints = (orders: Order[], txns: WalletTxn[]) =>
-  Math.max(0, BASE_POINTS + orderPoints(orders) - redeemedPoints(txns));
+/** `date` + `months`, keeping the day of the month where possible. */
+function addMonths(date: Date, months: number) {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, last));
+  return d;
+}
 
-export type PointsEvent = {
+/** When points earned on `earnedAt` expire. */
+export const pointsExpiryDate = (earnedAt: string | Date) =>
+  addMonths(new Date(earnedAt), POINTS_VALID_MONTHS).toISOString();
+
+/**
+ * Expiry of the points brought forward from earlier orders. There's no backend
+ * yet, so the demo puts it at the end of next month, which shows the
+ * "expiring soon" state. Replace with the real date from the API.
+ */
+function broughtForwardExpiry(now: Date) {
+  return new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59).toISOString();
+}
+
+/** One lot of points with its own expiry date. */
+export type PointsBatch = {
   id: string;
-  kind: "EARN" | "REDEEM" | "BROUGHT_FORWARD";
-  /** Signed: positive when earned, negative when redeemed. */
-  points: number;
-  /** null for the balance brought forward, which has no single date. */
-  createdAt: string | null;
   title: string;
   detail: string;
+  /** null for the balance brought forward, which has no single date. */
+  earnedAt: string | null;
+  expiresAt: string;
+  /** Points originally earned in this batch. */
+  earned: number;
+  /** Points still left in this batch (after expiry this is what was lost). */
+  remaining: number;
+  expired: boolean;
 };
 
-/** Every points movement, newest first. */
-export function pointsEvents(orders: Order[], txns: WalletTxn[]): PointsEvent[] {
-  const earned: PointsEvent[] = orders
+/**
+ * Every batch of points, soonest expiry first. Older wallet redemptions (from
+ * before redeeming was removed) are taken from the batches that expire first.
+ */
+export function pointsBatches(orders: Order[], txns: WalletTxn[], now = new Date()): PointsBatch[] {
+  const batches: PointsBatch[] = orders
     .filter((o) => o.pointsEarned > 0)
     .map((o) => {
       const first = o.items[0]?.product.name ?? "your order";
       const more = o.items.length - 1;
       return {
-        id: `earn-${o.id}`,
-        kind: "EARN" as const,
-        points: o.pointsEarned,
-        createdAt: o.createdAt,
+        id: o.id,
         title: `Earned on order ${o.id}`,
         detail: more > 0 ? `${first} + ${more} more` : first,
+        earnedAt: o.createdAt,
+        expiresAt: pointsExpiryDate(o.createdAt),
+        earned: o.pointsEarned,
+        remaining: o.pointsEarned,
+        expired: false,
       };
     });
+  if (BASE_POINTS > 0) {
+    batches.push({
+      id: "brought-forward",
+      title: "Points from earlier orders",
+      detail: "Balance brought forward",
+      earnedAt: null,
+      expiresAt: broughtForwardExpiry(now),
+      earned: BASE_POINTS,
+      remaining: BASE_POINTS,
+      expired: false,
+    });
+  }
+  batches.sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
+
+  let used = redeemedPoints(txns);
+  for (const b of batches) {
+    const take = Math.min(used, b.remaining);
+    b.remaining -= take;
+    used -= take;
+    b.expired = new Date(b.expiresAt).getTime() <= now.getTime();
+  }
+  return batches;
+}
+
+/** Points the customer has right now (earned and not yet expired). */
+export const availablePoints = (orders: Order[], txns: WalletTxn[], now = new Date()) =>
+  pointsBatches(orders, txns, now).reduce((n, b) => (b.expired ? n : n + b.remaining), 0);
+
+/** The next lot of points to expire, or null when nothing is due. */
+export function nextPointsExpiry(orders: Order[], txns: WalletTxn[], now = new Date()) {
+  const next = pointsBatches(orders, txns, now).find((b) => !b.expired && b.remaining > 0);
+  return next ? { points: next.remaining, expiresAt: next.expiresAt } : null;
+}
+
+export type PointsEvent = {
+  id: string;
+  kind: "EARN" | "REDEEM" | "BROUGHT_FORWARD" | "EXPIRE";
+  /** Signed: positive when earned, negative when expired (or redeemed in older versions). */
+  points: number;
+  /** null for the balance brought forward, which has no single date. */
+  createdAt: string | null;
+  /** For earned points: when they expire. */
+  expiresAt?: string;
+  title: string;
+  detail: string;
+};
+
+/** Every points movement, newest first. */
+export function pointsEvents(orders: Order[], txns: WalletTxn[], now = new Date()): PointsEvent[] {
+  const batches = pointsBatches(orders, txns, now);
+  const earned: PointsEvent[] = batches
+    .filter((b) => b.earnedAt)
+    .map((b) => ({
+      id: `earn-${b.id}`,
+      kind: "EARN" as const,
+      points: b.earned,
+      createdAt: b.earnedAt,
+      expiresAt: b.expiresAt,
+      title: b.title,
+      detail: b.detail,
+    }));
+  const expired: PointsEvent[] = batches
+    .filter((b) => b.expired && b.remaining > 0)
+    .map((b) => ({
+      id: `expire-${b.id}`,
+      kind: "EXPIRE" as const,
+      points: -b.remaining,
+      createdAt: b.expiresAt,
+      title: "Points expired",
+      detail: b.earnedAt ? `From order ${b.id}` : "Points from earlier orders",
+    }));
   const redeemed: PointsEvent[] = txns
     .filter((t) => t.kind === "POINTS")
     .map((t) => ({
@@ -124,15 +227,17 @@ export function pointsEvents(orders: Order[], txns: WalletTxn[]): PointsEvent[] 
       title: "Redeemed to wallet",
       detail: `+KWD ${t.amount.toFixed(3)} added to your wallet`,
     }));
-  const list = [...earned, ...redeemed].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-  if (BASE_POINTS > 0) {
+  const list = [...earned, ...expired, ...redeemed].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  const forward = batches.find((b) => !b.earnedAt);
+  if (forward) {
     list.push({
       id: "brought-forward",
       kind: "BROUGHT_FORWARD",
-      points: BASE_POINTS,
+      points: forward.earned,
       createdAt: null,
-      title: "Points from earlier orders",
-      detail: "Balance brought forward",
+      expiresAt: forward.expiresAt,
+      title: forward.title,
+      detail: forward.detail,
     });
   }
   return list;
@@ -230,28 +335,6 @@ export const walletApi = {
       title: "Added money",
       detail: WALLET_METHOD_LABEL[input.method],
       method: input.method,
-    };
-    write(WALLET_KEY, [txn, ...loadAll()]);
-    return txn;
-  },
-
-  /** Turns points into wallet money. `available` is the customer's redeemable points right now. */
-  redeemPoints(points: number, available: number): WalletTxn {
-    if (!Number.isInteger(points) || points < MIN_REDEEM_POINTS) {
-      throw new WalletError(`Redeem at least ${MIN_REDEEM_POINTS} points.`);
-    }
-    if (points > available) {
-      throw new WalletError(`You only have ${available} points to redeem.`);
-    }
-    const txn: WalletTxn = {
-      id: nextId(),
-      kind: "POINTS",
-      direction: "in",
-      amount: pointsToKwd(points),
-      createdAt: new Date().toISOString(),
-      title: "Points redeemed",
-      detail: `${points.toLocaleString("en-US")} points`,
-      points,
     };
     write(WALLET_KEY, [txn, ...loadAll()]);
     return txn;

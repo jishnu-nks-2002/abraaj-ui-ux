@@ -92,14 +92,37 @@ export const products: Product[] = [
     points: 55,
   },
   {
-    id: "alk330",
+    id: "gal5disp",
+    name: "Abraaj Disposable Gallon",
+    size: "18.9 L",
+    pack: "Single bottle · no return",
+    price: 1.5,
+    category: "Gallons",
+    image: p5gal,
+    blurb: "One-way 5 gallon bottle. Use it and recycle it, no empty bottle to hand back.",
+    points: 70,
+  },
+  // Alkaline comes in one bottle size (330 ml), sold as a single bottle or a case.
+  {
+    id: "alk330x1",
     name: "Abraaj Alkaline 330 ml",
     size: "330 ml",
-    pack: "Pack of 24",
-    price: 1.5,
+    pack: "Single bottle",
+    price: 0.075,
     category: "Alkaline",
     image: palk,
     blurb: "Balanced pH 8+ alkaline water in a compact bottle.",
+    points: 5,
+  },
+  {
+    id: "alk330",
+    name: "Abraaj Alkaline 330 ml",
+    size: "330 ml",
+    pack: "Case of 24",
+    price: 1.5,
+    category: "Alkaline",
+    image: palk,
+    blurb: "A case of 24 balanced pH 8+ alkaline bottles.",
     points: 90,
   },
   {
@@ -197,7 +220,7 @@ const bookletSpecs: (BookletSpec & { id: string; price: number; points: number }
 
 export const bookletProducts: Product[] = bookletSpecs.map(({ id, price, points, ...spec }) => ({
   id,
-  name: `${spec.label} gallon booklet`,
+  name: `${spec.coupons} Gallon booklet`,
   size: `${spec.coupons} coupons`,
   pack: `Valid ${spec.validityMonths} months`,
   price,
@@ -398,7 +421,8 @@ export const showcases: Showcase[] = [
     ribbon: "Stay balanced",
     tone: "green",
      video: sidevideo2,
-    productIds: ["alk330", "l15"],
+    // Single bottle + case: the only Alkaline size.
+    productIds: ["alk330x1", "alk330"],
     filter: "Alkaline",
   },
   {

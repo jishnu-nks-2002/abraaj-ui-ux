@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
 /**
- * Home "Categories" grid — six tiles, each a card-soft surface with the brand
+ * Home "Explore" grid (was "Categories") — six tiles, each a card-soft surface with the brand
  * line illustration in an aqua icon chip. The parent decides what a tile does;
  * this component only renders and reports the tile id.
  */
-export type HomeCategoryId = "offers" | "bottles" | "mosque" | "gallons" | "subscription" | "tissue-ice";
+export type HomeCategoryId = "offers" | "bottles" | "mosque" | "gallons" | "subscription" | "wallet";
 
 const tiles: { id: HomeCategoryId; label: string; Icon: () => ReactNode }[] = [
   { id: "offers", label: "Offers", Icon: OffersIcon },
@@ -13,7 +13,7 @@ const tiles: { id: HomeCategoryId; label: string; Icon: () => ReactNode }[] = [
   { id: "mosque", label: "Mosque", Icon: MosqueIcon },
   { id: "gallons", label: "Gallons", Icon: GallonIcon },
   { id: "subscription", label: "Subscription", Icon: SubscriptionIcon },
-  { id: "tissue-ice", label: "Tissue & Ice", Icon: TissueIceIcon },
+  { id: "wallet", label: "Wallet", Icon: WalletIcon },
 ];
 
 export function HomeCategories({
@@ -30,7 +30,7 @@ export function HomeCategories({
        3 × 2 on phones, one 6-up row from ~32rem (tablet), roomier from ~48rem. */
     <section className="@container mt-7" aria-labelledby="home-categories-title">
       <h3 id="home-categories-title" className="text-f-base font-bold text-foreground">
-        Categories
+        Explore
       </h3>
       <div className="mt-3 grid grid-cols-3 gap-2 xs:gap-2.5 @lg:grid-cols-6 @lg:gap-3 @3xl:gap-4">
         {tiles.map(({ id, label, Icon }) => {
@@ -179,19 +179,18 @@ function SubscriptionIcon() {
   );
 }
 
-function TissueIceIcon() {
+function WalletIcon() {
   return (
     <Svg>
-      {/* ice cubes */}
-      <path d="M20 7l7 1-1 7-7-1z" />
-      <path d="M6 22l6-3 3 6-6 3z" />
-      <path d="M49 21l7 1-1 7-7-1z" />
-      <path d="M28 20l9-2 3 11-9 2z" />
-      {/* tissue */}
-      <path d="M25 36c1-4 3-8 3-12M38 36c1-3 3-6 5-9" />
-      {/* box */}
-      <path d="M10 36h44v18H10z" />
-      <Mark x={32} y={45} s={1.2} />
+      {/* card peeking out of the wallet */}
+      <path d="M14 18l26-8 3 8" />
+      {/* wallet body */}
+      <path d="M10 20h40a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4z" />
+      <path d="M10 26h44" />
+      {/* clasp */}
+      <path d="M54 34H42a4 4 0 0 0 0 8h12z" />
+      <circle cx={43} cy={38} r={1.4} />
+      <Mark x={24} y={41} s={1.2} />
     </Svg>
   );
 }

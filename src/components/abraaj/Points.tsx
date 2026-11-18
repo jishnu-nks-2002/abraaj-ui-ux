@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { ArrowRightLeft, Check, ChevronRight, Gift, History, ShoppingBag, Star, Wallet, type LucideIcon } from "lucide-react";
+import { CalendarClock, ChevronRight, Gift, History, Hourglass, ShoppingBag, Star, Wallet, type LucideIcon } from "lucide-react";
 import { GALLON_ID, byId } from "@/lib/abraaj-data";
-import { formatPrice } from "@/lib/cart";
-import { formatDateTime } from "@/lib/dates";
+import { daysUntil, formatDate, formatDateTime } from "@/lib/dates";
 import {
-  MIN_REDEEM_POINTS,
-  POINTS_PER_KWD,
-  REDEEM_PRESETS,
-  pointsToKwd,
+  POINTS_EXPIRING_SOON_DAYS,
+  POINTS_VALID_MONTHS,
+  type PointsBatch,
   type PointsEvent,
 } from "@/lib/wallet";
 import { BackLink, SectionTitle } from "@/components/abraaj/order-ui";
@@ -23,17 +21,27 @@ const EVENT_ICON: Record<PointsEvent["kind"], LucideIcon> = {
   EARN: Star,
   REDEEM: Wallet,
   BROUGHT_FORWARD: Gift,
+  EXPIRE: Hourglass,
 };
+
+/** "in 12 days", "tomorrow", "today" */
+function dueIn(iso: string, now = new Date()) {
+  const d = daysUntil(iso, now);
+  if (d <= 0) return "today";
+  if (d === 1) return "tomorrow";
+  return `in ${d} days`;
+}
 
 /** One points row: icon, what happened, when, and the points. */
 export function PointsEventRow({ event }: { event: PointsEvent }) {
   const Icon = EVENT_ICON[event.kind];
   const gained = event.points > 0;
+  const expired = event.kind === "EXPIRE";
   return (
     <div className="card-soft flex items-center gap-3 rounded-2xl p-3">
       <span
         className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${
-          gained ? "bg-aqua-soft text-brand" : "bg-secondary text-muted-foreground"
+          gained ? "bg-aqua-soft text-brand" : expired ? "bg-destructive/10 text-destructive" : "bg-secondary text-muted-foreground"
         }`}
       >
         <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -44,10 +52,15 @@ export function PointsEventRow({ event }: { event: PointsEvent }) {
           {event.detail}
           {event.createdAt ? ` · ${formatDateTime(event.createdAt)}` : ""}
         </p>
+        {gained && event.expiresAt && (
+          <p className="truncate text-f-2xs font-semibold text-brand">
+            {new Date(event.expiresAt).getTime() <= Date.now() ? "Expired" : "Expires"} {formatDate(event.expiresAt)}
+          </p>
+        )}
       </div>
       <div className="shrink-0 text-right">
-        <p className={`text-f-sm font-extrabold ${gained ? "text-aqua" : "text-foreground"}`}>
-          <span className="sr-only">{gained ? "Points earned: " : "Points redeemed: "}</span>
+        <p className={`text-f-sm font-extrabold ${gained ? "text-aqua" : expired ? "text-destructive" : "text-foreground"}`}>
+          <span className="sr-only">{gained ? "Points earned: " : expired ? "Points expired: " : "Points redeemed: "}</span>
           {gained ? "+" : "−"}
           {num(Math.abs(event.points))}
         </p>
@@ -65,54 +78,28 @@ export function PointsScreen({
   available,
   pending,
   events,
+  batches,
   onBack,
-  onRedeem,
   onHistory,
-  onWallet,
+  onShop,
 }: {
-  /** Points that can be redeemed right now. */
+  /** Points the customer has now (earned and not expired). */
   available: number;
   /** Points sitting in the cart, earned once the order is placed. */
   pending: number;
   events: PointsEvent[];
+  /** Every lot of points with its expiry date (from `pointsBatches`). */
+  batches: PointsBatch[];
   onBack: () => void;
-  /** Redeems points into the wallet. Returns an error message to show, or null when it worked. */
-  onRedeem: (points: number) => string | null;
   onHistory: () => void;
-  onWallet: () => void;
+  onShop: () => void;
 }) {
-  const [text, setText] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
-
-  const points = text === "" ? 0 : Number(text);
-  const canRedeemAny = available >= MIN_REDEEM_POINTS;
-  const tooFew = text !== "" && points < MIN_REDEEM_POINTS;
-  const tooMany = points > available;
-  const valid = points >= MIN_REDEEM_POINTS && !tooMany;
-  const hint = tooFew
-    ? `Redeem at least ${MIN_REDEEM_POINTS} points.`
-    : tooMany
-      ? `You only have ${num(available)} points to redeem.`
-      : null;
-
+  const now = new Date();
   const total = available + pending;
   const gallonPoints = byId(GALLON_ID)?.points ?? 0;
-  const presets = REDEEM_PRESETS.filter((p) => p <= available);
-
-  function submit() {
-    if (!valid) return;
-    const err = onRedeem(points);
-    if (err) {
-      setError(err);
-      setDone(null);
-    } else {
-      setDone(`${num(points)} points redeemed. ${formatPrice(pointsToKwd(points))} added to your wallet.`);
-      setError(null);
-      setText("");
-    }
-  }
-
+  const upcoming = batches.filter((b) => !b.expired && b.remaining > 0);
+  const next = upcoming[0];
+  const nextSoon = next ? daysUntil(next.expiresAt, now) <= POINTS_EXPIRING_SOON_DAYS : false;
   const recent = events.slice(0, 3);
 
   return (
@@ -129,7 +116,7 @@ export function PointsScreen({
             <p className="mt-1 truncate text-f-xl font-extrabold tracking-tight" aria-live="polite">
               {num(total)}
             </p>
-            <p className="text-f-xs font-semibold opacity-80">Worth {formatPrice(pointsToKwd(total))}</p>
+            <p className="text-f-xs font-semibold opacity-80">Valid {POINTS_VALID_MONTHS} months from each order</p>
           </div>
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/15">
             <Star className="h-5 w-5" aria-hidden="true" />
@@ -137,7 +124,7 @@ export function PointsScreen({
         </div>
         <dl className="relative mt-4 grid grid-cols-2 gap-2 text-f-2xs">
           <div className="rounded-xl bg-white/15 px-3 py-2">
-            <dt className="opacity-80">Ready to redeem</dt>
+            <dt className="opacity-80">Available</dt>
             <dd className="text-f-sm font-extrabold">{num(available)}</dd>
           </div>
           <div className="rounded-xl bg-white/15 px-3 py-2">
@@ -145,108 +132,49 @@ export function PointsScreen({
             <dd className="text-f-sm font-extrabold">+{num(pending)}</dd>
           </div>
         </dl>
+        {next && (
+          <p className={`relative mt-3 flex items-center gap-1.5 rounded-xl px-3 py-2 text-f-2xs font-bold ${nextSoon ? "bg-white text-destructive" : "bg-white/15"}`}>
+            <Hourglass className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {num(next.remaining)} points expire {formatDate(next.expiresAt)} ({dueIn(next.expiresAt, now)})
+          </p>
+        )}
         {pending > 0 && (
           <p className="relative mt-2 text-f-2xs opacity-80">Cart points are added once you place the order.</p>
         )}
       </div>
 
-      {/* Redeem */}
+      {/* Expiry schedule */}
       <div className="card-soft mt-4 rounded-3xl p-3.5 xs:p-4">
-        <SectionTitle Icon={ArrowRightLeft}>Redeem to wallet</SectionTitle>
+        <SectionTitle Icon={CalendarClock}>Expiry dates</SectionTitle>
         <p className="mt-1 text-f-xs text-muted-foreground">
-          {num(POINTS_PER_KWD)} points = {formatPrice(1)}. Redeem {MIN_REDEEM_POINTS} points or more.
+          Points from each order expire {POINTS_VALID_MONTHS} months after the order date.
         </p>
-
-        {!canRedeemAny ? (
-          <p className="bg-secondary mt-3 rounded-xl px-3 py-2.5 text-f-xs font-semibold text-muted-foreground">
-            You need {num(MIN_REDEEM_POINTS - available)} more points before you can redeem. Every order earns more.
+        {upcoming.length === 0 ? (
+          <p className="mt-3 rounded-xl bg-secondary px-3 py-2.5 text-f-xs font-semibold text-muted-foreground">
+            No points to expire. Every order earns more.
           </p>
         ) : (
-          <>
-            <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Quick amounts">
-              {presets.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  aria-pressed={text === String(p)}
-                  onClick={() => {
-                    setText(String(p));
-                    setError(null);
-                    setDone(null);
-                  }}
-                  className={`rounded-full px-3.5 py-2 text-f-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
-                    text === String(p) ? "bg-brand text-primary-foreground" : "bg-secondary text-foreground"
-                  }`}
-                >
-                  {num(p)}
-                </button>
-              ))}
-              <button
-                type="button"
-                aria-pressed={text === String(available)}
-                onClick={() => {
-                  setText(String(available));
-                  setError(null);
-                  setDone(null);
-                }}
-                className={`rounded-full px-3.5 py-2 text-f-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
-                  text === String(available) ? "bg-brand text-primary-foreground" : "bg-secondary text-foreground"
-                }`}
-              >
-                All ({num(available)})
-              </button>
-            </div>
-
-            <label htmlFor="redeem-points" className="mt-3 block text-f-xs font-semibold text-muted-foreground">
-              Or enter points
-            </label>
-            <input
-              id="redeem-points"
-              value={text}
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="0"
-              aria-invalid={hint ? true : undefined}
-              aria-describedby="redeem-hint"
-              onChange={(e) => {
-                setText(e.target.value.replace(/\D/g, "").slice(0, 7).replace(/^0+(?=\d)/, ""));
-                setError(null);
-                setDone(null);
-              }}
-              /* 16px minimum stops iOS Safari zooming in on focus. */
-              className="mt-1 h-12 w-full rounded-2xl bg-secondary px-4 text-base font-semibold text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-brand"
-            />
-            <p
-              id="redeem-hint"
-              className={`mt-1.5 text-f-2xs ${hint ? "font-semibold text-destructive" : "text-muted-foreground"}`}
-            >
-              {hint ?? (valid ? `You'll get ${formatPrice(pointsToKwd(points))} in your wallet.` : `Up to ${num(available)} points.`)}
-            </p>
-
-            {error && (
-              <p role="alert" className="mt-3 text-f-xs font-semibold text-destructive">
-                {error}
-              </p>
-            )}
-            {done && (
-              <div role="status" className="bg-aqua-soft mt-3 rounded-xl px-3 py-2.5">
-                <p className="flex items-start gap-2 text-f-xs font-bold text-brand">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> {done}
-                </p>
-                <button onClick={onWallet} className="mt-1.5 ml-6 text-f-xs font-bold text-brand underline-offset-2 hover:underline">
-                  See my wallet
-                </button>
-              </div>
-            )}
-
-            <button
-              onClick={submit}
-              disabled={!valid}
-              className="mt-4 w-full rounded-2xl bg-brand py-4 text-f-sm font-bold text-primary-foreground transition-opacity disabled:opacity-50"
-            >
-              {valid ? `Redeem ${num(points)} points` : "Redeem points"}
-            </button>
-          </>
+          <ul className="mt-3 divide-y divide-border">
+            {upcoming.slice(0, 4).map((b) => {
+              const soon = daysUntil(b.expiresAt, now) <= POINTS_EXPIRING_SOON_DAYS;
+              return (
+                <li key={b.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <span className="min-w-0">
+                    <span className="block truncate text-f-xs font-bold text-foreground">{b.title}</span>
+                    <span className={`block text-f-2xs ${soon ? "font-bold text-destructive" : "text-muted-foreground"}`}>
+                      Expires {formatDate(b.expiresAt)} · {dueIn(b.expiresAt, now)}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-f-sm font-extrabold text-brand">{num(b.remaining)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {upcoming.length > 4 && (
+          <button onClick={onHistory} className="mt-1 text-f-xs font-bold text-brand underline-offset-2 hover:underline">
+            See all {upcoming.length}
+          </button>
         )}
       </div>
 
@@ -261,8 +189,8 @@ export function PointsScreen({
                 ? `Every order earns points. A 5 Gallon refill earns ${num(gallonPoints)}.`
                 : "Every order earns points.",
             ],
-            ["Redeem to your wallet", `${num(POINTS_PER_KWD)} points = ${formatPrice(1)}, from ${MIN_REDEEM_POINTS} points.`],
-            ["Wallet money is yours", "Redeemed points are added to your wallet balance straight away."],
+            ["Valid for " + POINTS_VALID_MONTHS + " months", "Points stay in your account for " + POINTS_VALID_MONTHS + " months from the order date."],
+            ["Then they expire", "Unused points are removed on their expiry date. Check the dates above."],
           ].map(([title, text], i) => (
             <li key={title} className="flex items-start gap-3">
               <span className="bg-brand-soft grid h-6 w-6 shrink-0 place-items-center rounded-full text-f-2xs font-extrabold text-brand">
@@ -277,15 +205,15 @@ export function PointsScreen({
         </ol>
       </div>
 
-      {/* Wallet shortcut */}
+      {/* Shop shortcut */}
       <button
-        onClick={onWallet}
+        onClick={onShop}
         className="card-soft mt-3 flex w-full items-center gap-3 rounded-3xl p-3.5 text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none xs:p-4"
       >
         <span className="bg-aqua-soft grid h-11 w-11 shrink-0 place-items-center rounded-full">
-          <Wallet className="h-5 w-5 text-brand" aria-hidden="true" />
+          <ShoppingBag className="h-5 w-5 text-brand" aria-hidden="true" />
         </span>
-        <span className="min-w-0 flex-1 text-f-sm font-bold text-foreground">Open my wallet</span>
+        <span className="min-w-0 flex-1 text-f-sm font-bold text-foreground">Shop and earn more points</span>
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       </button>
 
@@ -317,7 +245,7 @@ export function PointsScreen({
 /* Points history page                                                  */
 /* ------------------------------------------------------------------ */
 
-type PointsFilter = "all" | "earned" | "redeemed";
+type PointsFilter = "all" | "earned" | "expired";
 
 export function PointsHistoryScreen({
   events,
@@ -333,22 +261,23 @@ export function PointsHistoryScreen({
   const [filter, setFilter] = useState<PointsFilter>("all");
 
   const earned = events.filter((e) => e.points > 0);
-  const redeemed = events.filter((e) => e.points < 0);
+  // Anything that took points away: expiries (and wallet redemptions from older versions).
+  const lost = events.filter((e) => e.points < 0);
   const earnedTotal = earned.reduce((n, e) => n + e.points, 0);
-  const redeemedTotal = redeemed.reduce((n, e) => n - e.points, 0);
-  const shown = filter === "all" ? events : filter === "earned" ? earned : redeemed;
+  const lostTotal = lost.reduce((n, e) => n - e.points, 0);
+  const shown = filter === "all" ? events : filter === "earned" ? earned : lost;
 
   return (
     <section className="animate-rise">
       <BackLink label="Points" onClick={onBack} />
       <h1 className="mt-2 text-f-xl font-extrabold tracking-tight text-foreground">Points history</h1>
       <p className="mt-1 text-f-xs text-muted-foreground">
-        Ready to redeem <span className="font-bold text-brand">{num(available)} points</span>
+        Available now <span className="font-bold text-brand">{num(available)} points</span>
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-2.5">
         <StatCard label="Total earned" value={`${num(earnedTotal)} points`} />
-        <StatCard label="Total redeemed" value={`${num(redeemedTotal)} points`} tone="muted" />
+        <StatCard label="Total expired" value={`${num(lostTotal)} points`} tone="muted" />
       </div>
 
       <FilterChips<PointsFilter>
@@ -358,7 +287,7 @@ export function PointsHistoryScreen({
         options={[
           { id: "all", label: "All", count: events.length },
           { id: "earned", label: "Earned", count: earned.length },
-          { id: "redeemed", label: "Redeemed", count: redeemed.length },
+          { id: "expired", label: "Expired", count: lost.length },
         ]}
       />
 
@@ -374,12 +303,12 @@ export function PointsHistoryScreen({
           </div>
         ) : (
           <EmptyState
-            Icon={filter === "earned" ? Star : Wallet}
-            title={filter === "earned" ? "No points earned yet" : "Nothing redeemed yet"}
+            Icon={filter === "earned" ? Star : Hourglass}
+            title={filter === "earned" ? "No points earned yet" : "No expired points"}
             text={
               filter === "earned"
                 ? "Points from your orders will be listed here."
-                : "Points you turn into wallet money will be listed here."
+                : `Points expire ${POINTS_VALID_MONTHS} months after the order. Expired points will be listed here.`
             }
           />
         )

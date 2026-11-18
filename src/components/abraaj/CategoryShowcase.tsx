@@ -108,7 +108,7 @@ export function ShowcaseSection({
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_0%,rgba(255,255,255,0.18),transparent_55%)]" />
 
         {/* Banner content */}
-        <div className="px-screen relative flex h-full flex-col justify-center gap-3 pb-9 xs:pb-10">
+        <div className="px-screen relative flex h-full flex-col justify-center gap-3">
           <div className="min-w-0 max-w-[80%]">
             <h4 className="text-f-base leading-snug font-bold text-balance text-white">
               {showcase.headline}
@@ -126,27 +126,6 @@ export function ShowcaseSection({
             See all {showcase.label.toLowerCase()}
             <ChevronRight className="h-3 w-3" />
           </button>
-        </div>
-
-        {/* Bottom marquee strip */}
-        <div className="absolute inset-x-0 bottom-0 overflow-hidden bg-black/20 py-1.5 backdrop-blur-sm">
-          <div className="animate-marquee flex w-max items-center whitespace-nowrap">
-            {[0, 1].map((dup) => (
-              <div
-                key={dup}
-                className="flex shrink-0 items-center gap-10 pr-10"
-              >
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <span
-                    key={i}
-                    className="text-f-2xs font-bold tracking-wide text-white/90 uppercase"
-                  >
-                    {showcase.ribbon}
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
